@@ -1,0 +1,45 @@
+name: iscale-chatbot
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iscale}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iscale}
+      POSTGRES_DB: ${POSTGRES_DB:-iscale}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Exposed for local inspection; drop this in production.
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-iscale} -d ${POSTGRES_DB:-iscale}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Overrides the .env value so the app reaches the compose service, not localhost.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iscale}:${POSTGRES_PASSWORD:-iscale}@db:5432/${POSTGRES_DB:-iscale}
+      KNOWLEDGE_DIR: /app/knowledge
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Edit the knowledge JSON and restart the container - no rebuild needed.
+      - ./knowledge:/app/knowledge:ro
+      # Google service-account key, if you use the file-based option.
+      - ./secrets:/app/secrets:ro
+
+volumes:
+  postgres_data:

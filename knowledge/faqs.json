@@ -1,0 +1,59 @@
+{
+  "admission": [
+    {
+      "question": "How can I enroll?",
+      "keywords": ["enroll", "join", "admission", "register"],
+      "answer": "You can enroll by talking to one of our counselors. Would you like us to arrange a callback?"
+    },
+    {
+      "question": "Is there any eligibility?",
+      "keywords": ["eligibility", "qualification", "required"],
+      "answer": "Eligibility depends on the course. Please select the course you are interested in."
+    }
+  ],
+
+  "classes": [
+    {
+      "question": "Are classes live?",
+      "keywords": ["live", "class", "online"],
+      "answer": "Yes, all our sessions are conducted live online."
+    },
+    {
+      "question": "Are recordings available?",
+      "keywords": ["recording", "recorded", "miss class"],
+      "answer": "Yes, recordings are provided for enrolled students."
+    }
+  ],
+
+  "placement": [
+    {
+      "question": "Do you provide placement assistance?",
+      "keywords": ["placement", "job", "career"],
+      "answer": "Yes, we provide placement assistance including resume reviews, mock interviews and interview preparation."
+    }
+  ],
+
+  "certificate": [
+    {
+      "question": "Will I receive a certificate?",
+      "keywords": ["certificate"],
+      "answer": "Yes, certificates are provided after successful completion of the course."
+    }
+  ],
+
+  "fees": [
+    {
+      "question": "Can I pay in EMI?",
+      "keywords": ["emi", "installment"],
+      "answer": "EMI options are available for selected courses. Please contact our counselor for details."
+    }
+  ],
+
+  "support": [
+    {
+      "question": "How can I contact support?",
+      "keywords": ["support", "help", "contact"],
+      "answer": "You can raise your concern here or request a callback from our support team."
+    }
+  ]
+}

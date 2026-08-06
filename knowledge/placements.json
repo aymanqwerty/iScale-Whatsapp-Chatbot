@@ -1,0 +1,24 @@
+{
+  "placements": {
+    "overview": "iScale runs a structured placement support track alongside the technical curriculum. It is support and preparation, not a guarantee of employment.",
+    "services": [
+      "Resume and LinkedIn profile reviews",
+      "Mock interviews with practitioners",
+      "Domain-specific interview preparation sessions",
+      "Referrals to hiring partners",
+      "Guidance on portfolio and capstone presentation"
+    ],
+    "eligibility": "Learners who complete the program requirements, including graded assignments, the capstone project and the required attendance.",
+    "roles": [
+      "Data Analyst",
+      "Business Analyst",
+      "MIS / Reporting Analyst",
+      "Data Scientist",
+      "AI Engineer",
+      "BI Analyst"
+    ],
+    "hiring_partner_note": "The list of active hiring partners changes over time and is shared by a counselor.",
+    "salary_note": "Salary outcomes depend on prior experience, location, role and interview performance. A counselor can walk you through realistic ranges for your background instead of quoting a single number.",
+    "disclaimer": "iScale does not promise or guarantee a job, a placement or a specific salary. Placement support is preparation and access to opportunities."
+  }
+}

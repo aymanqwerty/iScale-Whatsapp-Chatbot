@@ -1,0 +1,36 @@
+{
+  "enabled": true,
+
+  "working_hours": {
+    "start": "11:00",
+    "end": "19:00"
+  },
+
+  "weekly_off": [
+    "Friday"
+  ],
+
+  "validation": {
+    "allow_past_time": false,
+    "allow_holiday": false,
+    "allow_after_hours": false
+  },
+
+  "required_fields": [
+    "name",
+    "phone",
+    "preferred_time"
+  ],
+
+  "optional_fields": [
+    "course",
+    "remarks",
+    "issue"
+  ],
+
+  "success_message": "Your callback request has been successfully recorded. Our counselor will contact you during your preferred time.",
+
+  "invalid_time_message": "Our counselors are available only between 11:00 AM and 7:00 PM except Friday. Please choose another time.",
+
+  "lead_status": "Pending Callback"
+}

@@ -1,0 +1,110 @@
+{
+  "company": {
+    "name": "The iScale",
+    "previous_name": "Industries Helping Hands",
+    "tagline": "Mastering Skills, Scaling Success.",
+    "founded_year": 2019,
+    "company_type": "EdTech",
+    "industry": "E-Learning & Job-Oriented Upskilling",
+    "website": "https://www.theiscale.com",
+    "description": "The iScale is an EdTech platform focused on making industry-oriented upskilling affordable and accessible. The platform helps college students, freshers, and working professionals build practical skills through live training, real-world projects, career guidance, and placement support.",
+    "mission": "To democratize upskilling by providing affordable, industry-relevant education that helps learners become job-ready.",
+    "vision": "To build a future-ready workforce by making quality education accessible to everyone.",
+    "service_location": "PAN India",
+    "office_locations": [
+      "Bangalore",
+      "Chhattisgarh"
+    ]
+  },
+  "contact": {
+    "phone": "+91 7880113112",
+    "whatsapp": "+91 7880113112",
+    "emails": [
+      "contact@theiscale.com",
+      "info@theiscale.com"
+    ]
+  },
+  "working_hours": {
+    "timezone": "Asia/Kolkata",
+    "business_hours": {
+      "monday": {
+        "open": "11:00",
+        "close": "19:00"
+      },
+      "tuesday": {
+        "open": "11:00",
+        "close": "19:00"
+      },
+      "wednesday": {
+        "open": "11:00",
+        "close": "19:00"
+      },
+      "thursday": {
+        "open": "11:00",
+        "close": "19:00"
+      },
+      "friday": {
+        "closed": true
+      },
+      "saturday": {
+        "open": "11:00",
+        "close": "19:00"
+      },
+      "sunday": {
+        "open": "11:00",
+        "close": "19:00"
+      }
+    }
+  },
+  "learning": {
+    "mode": "Online",
+    "live_classes": true,
+    "recorded_classes": true,
+    "real_world_projects": true,
+    "placement_assistance": true,
+    "internship_support": true,
+    "resume_building": true,
+    "mock_interviews": true,
+    "portfolio_guidance": true,
+    "career_guidance": true,
+    "certificate": true,
+    "language": [
+      "English",
+      "Hindi",
+      "Hinglish"
+    ]
+  },
+  "target_audience": [
+    "College Students",
+    "Freshers",
+    "Working Professionals",
+    "Career Switchers"
+  ],
+  "supported_course_categories": [
+    "Data Analytics",
+    "Data Science",
+    "Artificial Intelligence",
+    "Python",
+    "Power BI",
+    "SQL",
+    "Machine Learning",
+    "Foundation Courses",
+    "Free Courses"
+  ],
+  "social": {
+    "linkedin": "https://www.linkedin.com/company/theiscale",
+    "youtube": "https://www.youtube.com/@theiscale",
+    "website": "https://www.theiscale.com"
+  },
+  "chatbot": {
+    "bot_name": "iScale AI Assistant",
+    "handoff_to_human": true,
+    "callback_supported": true,
+    "collect_leads": true,
+    "business_hour_validation": true,
+    "lead_storage": [
+      "PostgreSQL",
+      "Google Sheets"
+    ]
+  }
+}

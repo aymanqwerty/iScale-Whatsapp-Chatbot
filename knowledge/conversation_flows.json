@@ -1,0 +1,63 @@
+{
+  "welcome": {
+    "message": "Hello 👋 Welcome to The iScale.\n\nHow can I help you today?",
+    "options": [
+      "Explore Courses",
+      "Already Enrolled",
+      "Talk to Counselor",
+      "General Question"
+    ]
+  },
+
+  "pre_sales": {
+    "course_selection": {
+      "message": "Which course are you interested in?",
+      "options": [
+        "Data Analytics",
+        "Data Science",
+        "AI Engineering",
+        "Python",
+        "Power BI",
+        "SQL",
+        "Not Sure"
+      ]
+    },
+
+    "callback_offer": {
+      "message": "Would you like one of our counselors to call you?"
+    }
+  },
+
+  "post_sales": {
+    "issue_selection": {
+      "message": "How can we help you?",
+      "options": [
+        "Assignment",
+        "Technical Issue",
+        "Placement",
+        "Certificate",
+        "Class Schedule",
+        "Other"
+      ]
+    },
+
+    "callback_offer": {
+      "message": "Would you like our support team to call you?"
+    }
+  },
+
+  "callback": {
+    "ask_name": "May I know your name?",
+    "ask_time": "What would be your preferred callback time? Our working hours are 11 AM to 7 PM except Friday.",
+    "confirmation": "Thank you. We've successfully recorded your callback request."
+  },
+
+  "fallback": {
+    "message": "I'm sorry, I couldn't find that information.",
+    "offer_callback": "Would you like me to arrange a callback with one of our counselors?"
+  },
+
+  "goodbye": {
+    "message": "Thank you for contacting The iScale. Have a wonderful day!"
+  }
+}
