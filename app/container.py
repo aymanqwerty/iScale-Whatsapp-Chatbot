@@ -12,11 +12,13 @@ from dataclasses import dataclass
 
 from app.core.config import Settings
 from app.core.logging import get_logger
+from app.core.ratelimit import SlidingWindowLimiter
 from app.db.session import Database
 from app.services.conversation_service import ConversationService
 from app.services.crm.base import LeadSink
 from app.services.crm.google_sheets import GoogleSheetsLeadSink
 from app.services.crm.null_sink import NullLeadSink
+from app.services.knowledge.consistency import check_business_hours
 from app.services.knowledge.loader import KnowledgeBase, load_knowledge_base
 from app.services.knowledge.retriever import KnowledgeRetriever, build_retriever
 from app.services.lead_service import LeadSyncService
@@ -48,6 +50,11 @@ class Container:
     allowlist: PhoneAllowlist
     lead_sink: LeadSink
     lead_sync: LeadSyncService
+    #: Raw webhook requests per source address. Sheds obvious floods.
+    webhook_limiter: SlidingWindowLimiter | None
+    #: Processed messages per sender. Each one costs an LLM call, so this caps
+    #: spend as well as abuse.
+    sender_limiter: SlidingWindowLimiter | None
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -55,6 +62,12 @@ class Container:
         database = Database(settings)
 
         knowledge_base = load_knowledge_base(settings.knowledge_dir)
+        for warning in check_business_hours(knowledge_base, settings):
+            # The environment drives validation; these files only tell the user
+            # what to expect. A mismatch means the bot promises one thing and
+            # enforces another, so it is worth a loud line at startup.
+            logger.warning("Business hours disagree - %s", warning)
+
         retriever = build_retriever(
             knowledge_base,
             limit=settings.knowledge_max_snippets,
@@ -93,6 +106,44 @@ class Container:
         )
         if not settings.google_sheets_enabled:
             logger.info("Google Sheets sync disabled - leads are stored in PostgreSQL only")
+        elif not lead_sink.enabled:
+            # Switched on but not usable. Saying exactly which piece is missing
+            # beats "disabled", which reads as a contradiction when the operator
+            # has just set the flag to true.
+            missing = (
+                "GOOGLE_SHEETS_SPREADSHEET_ID is empty"
+                if not settings.google_sheets_spreadsheet_id
+                else f"no service-account credentials at "
+                f"{settings.google_service_account_file} (and "
+                f"GOOGLE_SERVICE_ACCOUNT_JSON is unset)"
+            )
+            logger.warning(
+                "GOOGLE_SHEETS_ENABLED is true but the sink is not usable: %s. "
+                "Leads are being saved to PostgreSQL and marked SKIPPED; run "
+                "POST /api/v1/leads/sync-pending once this is fixed to push them.",
+                missing,
+            )
+
+        webhook_limiter = sender_limiter = None
+        if settings.rate_limit_enabled:
+            webhook_limiter = SlidingWindowLimiter(
+                limit=settings.rate_limit_webhook_per_ip,
+                window_seconds=settings.rate_limit_window_seconds,
+            )
+            sender_limiter = SlidingWindowLimiter(
+                limit=settings.rate_limit_per_sender,
+                window_seconds=settings.rate_limit_window_seconds,
+            )
+            logger.info(
+                "Rate limiting active",
+                extra={
+                    "per_sender": settings.rate_limit_per_sender,
+                    "per_ip": settings.rate_limit_webhook_per_ip,
+                    "window_seconds": settings.rate_limit_window_seconds,
+                },
+            )
+        else:
+            logger.warning("RATE_LIMIT_ENABLED is false - no request or spend ceiling")
 
         return cls(
             settings=settings,
@@ -106,6 +157,8 @@ class Container:
             allowlist=allowlist,
             lead_sink=lead_sink,
             lead_sync=LeadSyncService(database, lead_sink, settings),
+            webhook_limiter=webhook_limiter,
+            sender_limiter=sender_limiter,
         )
 
     # ------------------------------------------------------------------ #

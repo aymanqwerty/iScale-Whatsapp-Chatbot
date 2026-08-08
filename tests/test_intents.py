@@ -135,3 +135,42 @@ def test_clean_name_accepts(raw: str, expected: str) -> None:
 )
 def test_clean_name_rejects(raw: str) -> None:
     assert clean_name(raw) is None
+
+
+# --------------------------------------------------------------------------- #
+# Callback requests phrased freely
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Observed in production: none of these hit the fixed phrase list, so
+        # the turn fell through to the LLM, which answered conversationally and
+        # claimed to have booked a call. No lead was ever created.
+        "i want a call for data science on sunday 4 pm",
+        "i want to schedule a cal",  # typo: the user dropped an l
+        "need a call regarding fees",
+        "can you arrange a callback",
+        "give me a call tomorrow",
+        "book a call for me",
+        "i wanna call back",
+        "please set up a call",
+    ],
+)
+def test_free_form_callback_requests_escalate(text: str) -> None:
+    assert intents.wants_human(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "what is the fee for data science",
+        "how long is the course",
+        "i want to know about the syllabus",
+        "what tools are called in the course",
+        "i need to recall my password",
+        "do you provide placement",
+    ],
+)
+def test_ordinary_questions_do_not_escalate(text: str) -> None:
+    """A false positive only offers a callback, but it derails a real question."""
+    assert not intents.wants_human(text)

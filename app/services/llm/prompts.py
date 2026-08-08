@@ -12,6 +12,8 @@ Two rules drive everything here:
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.domain.enums import ConversationState
 from app.services.knowledge.models import KnowledgeSnippet
 
@@ -24,6 +26,20 @@ _FORBIDDEN = (
     "refund, cancellation or payment terms",
     "any commitment on behalf of the company",
 )
+
+#: Called out separately because it is the one invention that silently costs a
+#: customer. The model cannot write to the database - only the state machine
+#: creates a lead - so a sentence like "your call is scheduled for 4pm" leaves
+#: someone waiting for a call that was never booked. Observed in production.
+_NO_FALSE_BOOKING = """\
+NEVER CLAIM TO HAVE DONE SOMETHING
+You cannot book calls, schedule callbacks, register anyone, create tickets or
+change any record. You only provide information. Never write "I've scheduled",
+"your call is booked", "I have arranged", "it is confirmed" or anything similar
+- it would be untrue, and the person would wait for a call that never comes.
+When someone asks for a callback, say a counselor can call them and let the
+booking flow take over. Describe what WILL happen, never what you have done.
+"""
 
 SYSTEM_PROMPT = """\
 You are the WhatsApp receptionist for {company}, an EdTech institute.
@@ -57,6 +73,7 @@ When you cannot answer from the KNOWLEDGE section, use a line like:
 "I don't want to give you the wrong information on that - one of our counselors
 can confirm it for you." Then continue naturally.
 
+{no_false_booking}
 {extra}"""
 
 _NUDGE_INSTRUCTION = """\
@@ -81,12 +98,57 @@ and only compare with another course if they ask.
 """
 
 
+def build_house_rules(
+    rules: dict[str, Any] | None, prompt_overrides: dict[str, Any] | None = None
+) -> str:
+    """Render `chatbot_rules.json` and `prompts.json` as a prompt section.
+
+    These files are business-owned: staff edit tone, the never-do list and the
+    escalation wording without touching Python. They are additive on purpose -
+    the grounding rules above are the safety floor and cannot be edited away
+    from a JSON file.
+    """
+    rules = rules or {}
+    prompt_overrides = prompt_overrides or {}
+    lines: list[str] = []
+
+    behavior = rules.get("behavior")
+    if isinstance(behavior, dict):
+        for key in ("tone", "response_style", "emoji_usage", "language"):
+            value = str(behavior.get(key) or "").strip()
+            if value:
+                lines.append(f"   - {key.replace('_', ' ').capitalize()}: {value}")
+
+    never_do = rules.get("never_do")
+    if isinstance(never_do, list):
+        entries = [str(item).strip() for item in never_do if str(item).strip()]
+        if entries:
+            lines.append("   Absolute prohibitions:")
+            lines.extend(f"     - {item}" for item in entries)
+
+    reminders = prompt_overrides.get("reminders")
+    if isinstance(reminders, dict):
+        entries = [str(v).strip() for v in reminders.values() if str(v).strip()]
+        lines.extend(f"   - {item}" for item in entries)
+
+    if_unknown = rules.get("if_unknown")
+    if isinstance(if_unknown, dict) and str(if_unknown.get("message") or "").strip():
+        lines.append(
+            "   When you do not know something, offer a callback in your own "
+            f"words, along these lines: \"{str(if_unknown['message']).strip()}\""
+        )
+
+    return "HOUSE RULES\n" + "\n".join(lines) if lines else ""
+
+
 def build_system_prompt(
     *,
     company: str,
     state: ConversationState,
     course_name: str | None = None,
     nudge_callback: bool = False,
+    rules: dict[str, Any] | None = None,
+    prompt_overrides: dict[str, Any] | None = None,
 ) -> str:
     """Assemble the system instruction for this particular turn."""
     extra_parts: list[str] = []
@@ -96,10 +158,14 @@ def build_system_prompt(
         extra_parts.append(_COURSE_FOCUS.format(course=course_name))
     if nudge_callback:
         extra_parts.append(_NUDGE_INSTRUCTION)
+    house_rules = build_house_rules(rules, prompt_overrides)
+    if house_rules:
+        extra_parts.append(house_rules)
 
     return SYSTEM_PROMPT.format(
         company=company,
         forbidden="\n".join(f"   - {item}" for item in _FORBIDDEN),
+        no_false_booking=_NO_FALSE_BOOKING,
         extra="\n".join(extra_parts).strip(),
     )
 

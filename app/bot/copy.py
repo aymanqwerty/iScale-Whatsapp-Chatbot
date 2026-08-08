@@ -16,6 +16,9 @@ from app.services.knowledge.loader import KnowledgeBase
 MENU_COURSES = "menu:courses"
 MENU_ENROLLED = "menu:enrolled"
 MENU_COUNSELOR = "menu:counselor"
+#: Retired from the menu but still handled. Old messages stay tappable in
+#: WhatsApp forever, so a user scrolling back could still send this id - and a
+#: dropped branch would answer them with "I didn't understand that".
 MENU_GENERAL = "menu:general"
 
 COURSE_PREFIX = "course:"
@@ -28,13 +31,27 @@ SUPPORT_PREFIX = "support:"
 CONFIRM_YES = "confirm:yes"
 CONFIRM_NO = "confirm:no"
 
-#: (id, title, keywords the user might type instead of tapping)
+#: (id, title, description, keywords the user might type instead of tapping)
+#:
+#: The description is no longer rendered - menus show titles only, which reads
+#: far cleaner on a phone. It is kept here as documentation of what each option
+#: means, and because the keyword matching below is easier to review beside it.
+#:
+#: Three options, split by where the person is rather than by what they want to
+#: do. Every path ends at the same place - a call booked with a counselor - so
+#: the third option is simply the shortcut for someone who already knows that.
+#:
+#: "General Question" was removed deliberately: free text is answered in any
+#: state, so the option only ever added a decision without adding a capability.
 MAIN_MENU_OPTIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     (
         MENU_COURSES,
-        "Explore Courses",
-        "See our programs, fees and duration",
-        ("course", "courses", "explore", "program", "programme", "learn", "join", "admission"),
+        "Not Enrolled Yet",
+        "Explore our courses",
+        (
+            "not enrolled", "new", "course", "courses", "explore", "program",
+            "programme", "learn", "join", "admission", "interested",
+        ),
     ),
     (
         MENU_ENROLLED,
@@ -44,15 +61,9 @@ MAIN_MENU_OPTIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ),
     (
         MENU_COUNSELOR,
-        "Talk to Counselor",
-        "Request a callback from our team",
+        "Talk to a Counselor",
+        "Book a call with our team",
         ("counselor", "counsellor", "callback", "call", "talk", "human", "agent", "advisor"),
-    ),
-    (
-        MENU_GENERAL,
-        "General Question",
-        "Careers, roadmaps and advice",
-        ("general", "question", "doubt", "query", "advice", "ask"),
     ),
 )
 
@@ -106,8 +117,8 @@ def welcome_message(company: str, *, returning_name: str | None = None) -> Outbo
     return OutboundMessage(
         text=f"{greeting}\n\nHow can I help you today?",
         list_rows=tuple(
-            ListRow(id=oid, title=title, description=desc)
-            for oid, title, desc, _ in MAIN_MENU_OPTIONS
+            ListRow(id=oid, title=title)
+            for oid, title, _, _ in MAIN_MENU_OPTIONS
         ),
         list_button_label="Choose an option",
         header="Main menu",
@@ -118,8 +129,8 @@ def main_menu(prompt: str = "What would you like to do next?") -> OutboundMessag
     return OutboundMessage(
         text=prompt,
         list_rows=tuple(
-            ListRow(id=oid, title=title, description=desc)
-            for oid, title, desc, _ in MAIN_MENU_OPTIONS
+            ListRow(id=oid, title=title)
+            for oid, title, _, _ in MAIN_MENU_OPTIONS
         ),
         list_button_label="Choose an option",
         header="Main menu",
@@ -134,29 +145,17 @@ def course_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:
     options, and WhatsApp caps a list at ten rows regardless.
     """
     rows = [
-        ListRow(
-            id=f"{COURSE_PREFIX}{course.slug}",
-            title=course.name,
-            description=course.summary_line(),
-        )
+        ListRow(id=f"{COURSE_PREFIX}{course.slug}", title=course.name)
         for course in knowledge_base.featured_courses
     ]
     # Reserve the last two rows for "Other courses" and "Not sure".
     rows = rows[:8]
     if knowledge_base.other_courses:
         rows.append(
-            ListRow(
-                id=COURSE_OTHERS,
-                title="Other courses",
-                description="Shorter and free programs",
-            )
+            ListRow(id=COURSE_OTHERS, title="Other courses")
         )
     rows.append(
-        ListRow(
-            id=COURSE_UNSURE,
-            title="Not sure yet",
-            description="Help me pick the right one",
-        )
+        ListRow(id=COURSE_UNSURE, title="Not sure yet")
     )
     return OutboundMessage(
         text="Here are our main programs. Which one would you like to know about?",
@@ -169,20 +168,10 @@ def course_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:
 def other_courses_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:
     """Second-level list of the non-featured courses."""
     rows = [
-        ListRow(
-            id=f"{COURSE_PREFIX}{course.slug}",
-            title=course.name,
-            description=course.summary_line(),
-        )
+        ListRow(id=f"{COURSE_PREFIX}{course.slug}", title=course.name)
         for course in knowledge_base.other_courses
     ][:9]
-    rows.append(
-        ListRow(
-            id=COURSE_UNSURE,
-            title="Not sure yet",
-            description="Help me pick the right one",
-        )
-    )
+    rows.append(ListRow(id=COURSE_UNSURE, title="Not sure yet"))
     return OutboundMessage(
         text="These are our shorter and free programs.",
         list_rows=tuple(rows),
@@ -195,8 +184,7 @@ def support_menu() -> OutboundMessage:
     return OutboundMessage(
         text="Sure - what do you need help with?",
         list_rows=tuple(
-            ListRow(id=oid, title=title, description=desc)
-            for oid, title, desc, _ in SUPPORT_OPTIONS
+            ListRow(id=oid, title=title) for oid, title, _, _ in SUPPORT_OPTIONS
         ),
         list_button_label="Choose a topic",
         header="Student support",

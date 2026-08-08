@@ -9,10 +9,11 @@ exercising the code that actually ships.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -236,3 +237,44 @@ async def harness(
         messaging=messaging,
         sink=sink,
     )
+
+
+# --------------------------------------------------------------------------- #
+# API clients for the security tests
+# --------------------------------------------------------------------------- #
+def _client_with(settings_overrides: dict[str, object], tmp_path: Path):
+    """A TestClient over a real app, with a throwaway SQLite database."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+
+    from app.main import create_app
+
+    db_file = tmp_path / f"sec-{uuid.uuid4().hex}.db"
+    sync_engine = create_engine(f"sqlite:///{db_file}")
+    Base.metadata.create_all(sync_engine)
+    sync_engine.dispose()
+
+    settings = Settings(
+        _env_file=None,
+        database_url=f"sqlite+aiosqlite:///{db_file}",
+        knowledge_dir=PROJECT_ROOT / "knowledge",
+        whatsapp_enabled=False,
+        google_sheets_enabled=False,
+        log_level="WARNING",
+        **settings_overrides,  # type: ignore[arg-type]
+    )
+    return TestClient(create_app(settings))
+
+
+@pytest.fixture
+def api_key_client(tmp_path: Path) -> Iterator[Any]:
+    """App configured with a known API key."""
+    with _client_with({"environment": "test", "api_key": "s3cret-key"}, tmp_path) as c:
+        yield c
+
+
+@pytest.fixture
+def unconfigured_prod_client(tmp_path: Path) -> Iterator[Any]:
+    """Production with no API key set - lead data must fail closed."""
+    with _client_with({"environment": "production", "api_key": ""}, tmp_path) as c:
+        yield c

@@ -56,6 +56,19 @@ async def receive(
     x_hub_signature_256: Annotated[str | None, Header(alias="X-Hub-Signature-256")] = None,
 ) -> Any:
     settings = container.settings
+
+    # Shed obvious floods before reading the body or computing an HMAC. Meta
+    # bursts legitimately on redelivery, so the ceiling is generous - this is
+    # here to stop a flood, not to police normal traffic.
+    if container.webhook_limiter is not None:
+        source = request.client.host if request.client else "unknown"
+        if not container.webhook_limiter.allow(source):
+            logger.warning("Webhook rate limit exceeded", extra={"source": source})
+            return Response(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content="Too many requests",
+            )
+
     raw_body = await request.body()
 
     app_secret = settings.whatsapp_app_secret.get_secret_value()
@@ -103,13 +116,42 @@ async def receive(
             extra={"dropped": ignored},
         )
 
+    # Per-sender ceiling. Every message that gets past here costs an LLM call,
+    # so one person sending in a loop is a bill as well as a queue. Throttled
+    # messages are dropped silently rather than answered with "slow down":
+    # someone hammering send is not reading, and a reply would double the
+    # traffic we are trying to reduce.
+    if container.sender_limiter is not None:
+        within_budget = []
+        for inbound in accepted:
+            if container.sender_limiter.allow(inbound.from_phone):
+                within_budget.append(inbound)
+            else:
+                logger.warning(
+                    "Sender rate limit exceeded - dropping message",
+                    extra={"phone": _mask(inbound.from_phone)},
+                )
+        throttled = len(accepted) - len(within_budget)
+        accepted = within_budget
+    else:
+        throttled = 0
+
     for inbound in accepted:
         background_tasks.add_task(
             _process, conversation_service, container, inbound
         )
 
     logger.info("Webhook accepted", extra={"messages": len(accepted)})
-    return {"status": "accepted", "messages": len(accepted), "ignored": ignored}
+    return {
+        "status": "accepted",
+        "messages": len(accepted),
+        "ignored": ignored,
+        "throttled": throttled,
+    }
+
+
+def _mask(phone: str) -> str:
+    return f"{phone[:4]}***{phone[-3:]}" if len(phone) > 7 else "***"
 
 
 async def _process(

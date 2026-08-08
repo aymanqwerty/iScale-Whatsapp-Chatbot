@@ -8,10 +8,12 @@ import json
 
 import pytest
 
+from app.bot import copy
 from app.core.config import Settings
 from app.domain.enums import MessageKind
 from app.domain.messaging import Button, ListRow, OutboundMessage
 from app.schemas.whatsapp import WebhookPayload
+from app.services.knowledge.loader import KnowledgeBase
 from app.services.whatsapp.allowlist import PhoneAllowlist
 from app.services.whatsapp.client import WhatsAppClient
 from app.services.whatsapp.guarded_client import GuardedMessagingClient
@@ -357,3 +359,27 @@ async def test_guarded_client_lets_a_listed_recipient_through() -> None:
     await guarded.send("919876543210", OutboundMessage(text="hi"))
 
     assert [to for to, _ in inner.sent] == ["919876543210"]
+
+
+# --------------------------------------------------------------------------- #
+# Menus carry titles only
+# --------------------------------------------------------------------------- #
+def test_menus_have_no_row_descriptions(knowledge_base: KnowledgeBase) -> None:
+    """Descriptions were dropped: on a phone the second line is mostly noise.
+
+    Asserted across every list the bot sends, so a new menu cannot quietly
+    reintroduce them.
+    """
+    menus = [
+        copy.welcome_message("iScale"),
+        copy.main_menu(),
+        copy.course_menu(knowledge_base),
+        copy.other_courses_menu(knowledge_base),
+        copy.support_menu(),
+    ]
+
+    for menu in menus:
+        assert menu.list_rows, "expected a list message"
+        for row in menu.list_rows:
+            assert row.title
+            assert row.description == "", f"{row.title!r} still carries a description"

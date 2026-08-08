@@ -1,21 +1,24 @@
-"""Read-only lead endpoints.
+"""Lead endpoints, for a counselor-facing dashboard to be built on later.
 
-Enough for a counselor-facing dashboard to be built on top later. There is no
-authentication here yet - keep this router behind your ingress or add an API-key
-dependency before exposing it publicly.
+Every route here requires `X-API-Key`, because every route here returns
+personal data: names, phone numbers, callback times and free-text remarks.
+The dependency is declared on the router rather than per-route so a new
+endpoint added below is protected by default rather than by remembering.
 """
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import ContainerDep, SessionDep
+from app.api.deps import ContainerDep, SessionDep, require_api_key
 from app.repositories.lead_repository import LeadRepository
 from app.schemas.lead import LeadList, LeadRead
 
-router = APIRouter(prefix="/leads", tags=["leads"])
+router = APIRouter(
+    prefix="/leads", tags=["leads"], dependencies=[Depends(require_api_key)]
+)
 
 
 @router.get("", response_model=LeadList, summary="List recent leads")

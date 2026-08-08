@@ -1,0 +1,103 @@
+# Render blueprint. Create the service from this with:
+#   Render dashboard -> New -> Blueprint -> point it at this repository.
+#
+# Secrets are deliberately NOT in this file - it is committed. Every value
+# marked `sync: false` must be set by hand in the Render dashboard under
+# Environment, where it is stored encrypted and never appears in git.
+
+services:
+  - type: web
+    name: iscale-whatsapp-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore # closest to India; keeps Meta webhook round-trips short
+
+    # `free` sleeps after 15 minutes idle and takes ~50s to wake, so the first
+    # message after a quiet spell arrives very late. That is survivable here
+    # only because the webhook is de-duplicated on the WhatsApp message id, so
+    # Meta's retry is answered exactly once.
+    #
+    # On `free` you MUST add an external keep-alive hitting
+    # /api/v1/health every 5 minutes - see DEPLOYMENT.md. Free allows ~750
+    # instance-hours/month and staying awake uses ~730, so one service fits.
+    #
+    # `starter` (~$7/mo) removes the problem entirely and is worth it once
+    # real customers are on the number.
+    plan: free
+
+    healthCheckPath: /api/v1/health
+
+    envVars:
+      # --- set these in the dashboard -------------------------------------
+      - key: DATABASE_URL # Supabase pooler URI, see DEPLOYMENT.md
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_ALLOWED_NUMBERS
+        sync: false
+      # Render's filesystem is ephemeral, so the service-account FILE cannot be
+      # used. Paste the whole JSON key into this variable instead - the loader
+      # accepts either.
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+
+      # --- generated once by Render, then fixed ---------------------------
+      - key: API_KEY
+        generateValue: true
+
+      # --- safe to keep in the repo ---------------------------------------
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_JSON
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: WHATSAPP_ENABLED
+        value: "true"
+      - key: WHATSAPP_API_VERSION
+        value: v21.0
+      # Stays ON for the soft launch. Turning it off is the moment real
+      # customers reach the bot - do that deliberately, not on first deploy.
+      - key: WHATSAPP_ALLOWLIST_ENABLED
+        value: "true"
+      - key: GOOGLE_SHEETS_ENABLED
+        value: "true"
+      - key: GOOGLE_SHEETS_WORKSHEET_NAME
+        value: Leads
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: RATE_LIMIT_PER_SENDER
+        value: "20"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: RATE_LIMIT_WEBHOOK_PER_IP
+        value: "120"
+      - key: BUSINESS_TIMEZONE
+        value: Asia/Kolkata
+      - key: BUSINESS_OPEN_TIME
+        value: "11:00"
+      - key: BUSINESS_CLOSE_TIME
+        value: "19:00"
+      - key: BUSINESS_CLOSED_WEEKDAYS
+        value: friday
+      - key: QNA_NUDGE_THRESHOLD
+        value: "3"
+      - key: HISTORY_MESSAGE_LIMIT
+        value: "10"
+      # One instance runs migrations on boot. If you ever scale beyond one,
+      # set this to false here and run `alembic upgrade head` as a release step
+      # instead, so concurrent boots cannot race on the same migration.
+      - key: RUN_MIGRATIONS
+        value: "true"

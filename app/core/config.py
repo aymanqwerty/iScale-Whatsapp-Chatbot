@@ -86,6 +86,23 @@ class Settings(BaseSettings):
     whatsapp_allowlist_enabled: bool = True
     whatsapp_allowed_numbers: str = ""
 
+    # --- API protection ----------------------------------------------------
+    # The lead endpoints return names, phone numbers and remarks. Set this and
+    # callers must send it as `X-API-Key`. Leaving it empty is refused outright
+    # in production - the same posture as the WhatsApp app secret, because the
+    # failure mode is identical: a quiet warning nobody reads, and personal data
+    # served to anyone who can reach the port.
+    api_key: SecretStr = SecretStr("")
+
+    rate_limit_enabled: bool = True
+    #: Messages one sender may have processed per window. Each one costs an LLM
+    #: call, so this is a spend control as much as an abuse control.
+    rate_limit_per_sender: int = 20
+    rate_limit_window_seconds: float = 60.0
+    #: Raw webhook requests accepted per source address per window. Generous,
+    #: because Meta legitimately bursts on redelivery.
+    rate_limit_webhook_per_ip: int = 120
+
     # --- Google Sheets -----------------------------------------------------
     google_sheets_enabled: bool = False
     google_sheets_spreadsheet_id: str = ""

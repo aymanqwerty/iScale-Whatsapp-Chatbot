@@ -135,7 +135,7 @@ def test_readiness_reports_each_dependency(client: TestClient) -> None:
     payload = response.json()
     assert payload["status"] == "ready"
     assert payload["checks"]["database"] == "ok"
-    assert payload["checks"]["knowledge_base"]["courses"] == 6
+    assert payload["checks"]["knowledge_base"]["courses"] == 8
 
 
 def test_root_reports_the_service(client: TestClient) -> None:
@@ -197,7 +197,12 @@ def test_signed_message_is_accepted_and_answered(client: TestClient) -> None:
     response = client.post("/api/v1/webhook", content=raw, headers=headers)
 
     assert response.status_code == 200
-    assert response.json() == {"status": "accepted", "messages": 1, "ignored": 0}
+    assert response.json() == {
+        "status": "accepted",
+        "messages": 1,
+        "ignored": 0,
+        "throttled": 0,
+    }
 
     # TestClient runs background tasks before returning, so the reply is already out.
     outbox = client.get("/api/v1/simulate/outbox").json()
@@ -216,7 +221,12 @@ def test_message_from_a_stranger_is_dropped_silently(client: TestClient) -> None
 
     # Still a 200 - a 4xx or 5xx would have Meta retry the same message.
     assert response.status_code == 200
-    assert response.json() == {"status": "accepted", "messages": 0, "ignored": 1}
+    assert response.json() == {
+        "status": "accepted",
+        "messages": 0,
+        "ignored": 1,
+        "throttled": 0,
+    }
 
     # No reply went out...
     outbox = client.get("/api/v1/simulate/outbox").json()

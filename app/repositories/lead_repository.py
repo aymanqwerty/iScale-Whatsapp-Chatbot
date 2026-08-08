@@ -55,10 +55,21 @@ class LeadRepository:
         return list(result.scalars().all())
 
     async def list_pending_sync(self, limit: int = 100) -> list[Lead]:
-        """Leads that never made it to the sheet - lets an operator retry."""
+        """Leads that never made it to the sheet - lets an operator retry.
+
+        SKIPPED counts as pending. It means no sink was configured when the lead
+        was captured, which is the normal state during development - so every
+        lead taken before Google Sheets was switched on carries it. Excluding
+        them made those leads permanently unrecoverable through this path, even
+        once a sink existed. Only SYNCED is terminal.
+        """
         result = await self._session.execute(
             select(Lead)
-            .where(Lead.sync_status.in_((SyncStatus.PENDING, SyncStatus.FAILED)))
+            .where(
+                Lead.sync_status.in_(
+                    (SyncStatus.PENDING, SyncStatus.FAILED, SyncStatus.SKIPPED)
+                )
+            )
             .order_by(Lead.id.asc())
             .limit(limit)
         )

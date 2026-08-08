@@ -72,6 +72,22 @@ def _format_hours(working_hours: dict[str, Any]) -> str:
     return f"{rendered} ({timezone})" if timezone and rendered else rendered
 
 
+def _grouped(
+    document: dict[str, Any], *, list_key: str
+) -> list[tuple[str, Any]]:
+    """Yield `(category, entries)` pairs from a grouped or flat document.
+
+    A flat `{"faqs": [...]}` yields one pair with an empty category; a grouped
+    `{"admission": [...], "classes": [...]}` yields one pair per key. Supporting
+    both means a restructured file degrades loudly (wrong tags) rather than
+    silently (nothing loaded).
+    """
+    flat = document.get(list_key)
+    if isinstance(flat, list):
+        return [("", flat)]
+    return [(key, value) for key, value in document.items() if isinstance(value, list)]
+
+
 _AUDIENCES: frozenset[str] = frozenset({"all", "pre_sales", "post_sales"})
 
 
@@ -100,6 +116,9 @@ class KnowledgeBase:
         snippets: list[KnowledgeSnippet],
         company: dict[str, Any],
         placements: dict[str, Any],
+        rules: dict[str, Any] | None = None,
+        prompt_overrides: dict[str, Any] | None = None,
+        documents: dict[str, Any] | None = None,
     ) -> None:
         self._courses = courses
         self._courses_by_slug = {c.slug: c for c in courses}
@@ -107,6 +126,9 @@ class KnowledgeBase:
         self._snippets_by_id = {s.id: s for s in snippets}
         self._company = company
         self._placements = placements
+        self._rules = rules or {}
+        self._prompt_overrides = prompt_overrides or {}
+        self._documents = documents or {}
 
     # --- structured access -------------------------------------------------
     @property
@@ -146,6 +168,25 @@ class KnowledgeBase:
     @property
     def placements(self) -> dict[str, Any]:
         return dict(self._placements)
+
+    @property
+    def rules(self) -> dict[str, Any]:
+        """`chatbot_rules.json` - persona and guardrails, owned by the business.
+
+        Not retrievable knowledge: these shape *how* the bot answers, so they go
+        into the system prompt on every turn rather than into the index.
+        """
+        return dict(self._rules)
+
+    @property
+    def prompt_overrides(self) -> dict[str, Any]:
+        """`prompts.json` - objectives and standing reminders for the prompt."""
+        return dict(self._prompt_overrides)
+
+    @property
+    def documents(self) -> dict[str, Any]:
+        """Raw parsed JSON per filename, for cross-file consistency checks."""
+        return dict(self._documents)
 
     @property
     def company_name(self) -> str:
@@ -222,8 +263,18 @@ class KnowledgeLoader:
         company = self._read("company.json")
         placements = self._read("placements.json").get("placements", {})
         raw_courses = self._read("courses.json").get("courses", [])
-        raw_faqs = self._read("faqs.json").get("faqs", [])
-        raw_policies = self._read("policies.json").get("policies", [])
+        # Both files are read whole: they are grouped by category/section now,
+        # and were flat lists under a "faqs"/"policies" key before. The snippet
+        # builders accept either, so an edit to the shape cannot silently drop
+        # every entry the way it did before.
+        raw_faqs = self._read("faqs.json")
+        raw_policies = self._read("policies.json")
+        # Persona and prompt guidance. These steer every answer rather than
+        # being retrieved for particular questions, so they are kept aside from
+        # the snippet index and injected into the system prompt instead.
+        rules = self._read("chatbot_rules.json")
+        prompt_overrides = self._read("prompts.json")
+        callback_rules = self._read("callback_rules.json")
 
         courses = [
             Course(slug=_slugify(entry), name=str(entry.get("name", "")).strip(), raw=entry)
@@ -248,7 +299,17 @@ class KnowledgeLoader:
             },
         )
         return KnowledgeBase(
-            courses=courses, snippets=snippets, company=company, placements=placements
+            courses=courses,
+            snippets=snippets,
+            company=company,
+            placements=placements,
+            rules=rules,
+            prompt_overrides=prompt_overrides,
+            documents={
+                "callback_rules.json": callback_rules,
+                "policies.json": raw_policies,
+                "company.json": company,
+            },
         )
 
     # ------------------------------------------------------------------ #
@@ -333,40 +394,79 @@ class KnowledgeLoader:
             )
         return out
 
-    def _faq_snippets(self, entries: list[dict[str, Any]]) -> list[KnowledgeSnippet]:
+    def _faq_snippets(self, document: dict[str, Any]) -> list[KnowledgeSnippet]:
+        """Build FAQ snippets from either supported layout.
+
+        New: `{"admission": [{question, keywords, answer}, ...], ...}`
+        Old: `{"faqs": [{id, question, answer, tags}, ...]}`
+        """
         out: list[KnowledgeSnippet] = []
-        for index, entry in enumerate(entries):
-            question = str(entry.get("question", "")).strip()
-            answer = str(entry.get("answer", "")).strip()
-            if not question or not answer:
+        for category, entries in _grouped(document, list_key="faqs"):
+            if not isinstance(entries, list):
                 continue
-            out.append(
-                KnowledgeSnippet(
-                    id=str(entry.get("id") or f"faq:{index}"),
-                    title=question,
-                    content=answer,
-                    source="faq",
-                    tags=frozenset(str(t).lower() for t in entry.get("tags", [])),
-                    course=entry.get("course"),
-                    audience=_audience(entry.get("audience")),
-                    weight=1.1,
+            for index, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    continue
+                question = str(entry.get("question", "")).strip()
+                answer = str(entry.get("answer", "")).strip()
+                if not question or not answer:
+                    continue
+                # `keywords` is the new spelling of `tags`; accept both.
+                terms = entry.get("keywords") or entry.get("tags") or []
+                tags = {str(t).lower() for t in terms}
+                if category:
+                    tags.add(category.lower())
+                out.append(
+                    KnowledgeSnippet(
+                        id=str(entry.get("id") or f"faq:{category or 'general'}:{index}"),
+                        title=question,
+                        content=answer,
+                        source="faq",
+                        tags=frozenset(tags),
+                        course=entry.get("course"),
+                        audience=_audience(entry.get("audience")),
+                        weight=1.1,
+                    )
                 )
-            )
         return out
 
-    def _policy_snippets(self, entries: list[dict[str, Any]]) -> list[KnowledgeSnippet]:
-        out: list[KnowledgeSnippet] = []
-        for index, entry in enumerate(entries):
-            content = str(entry.get("content", "")).strip()
-            if not content:
-                continue
-            out.append(
+    def _policy_snippets(self, document: dict[str, Any]) -> list[KnowledgeSnippet]:
+        """Build policy snippets from either supported layout.
+
+        New: `{"refund_policy": {available, message}, "working_hours": {...}}`
+        Old: `{"policies": [{id, title, content, tags}, ...]}`
+        """
+        entries = document.get("policies")
+        if isinstance(entries, list):
+            return [
                 KnowledgeSnippet(
                     id=str(entry.get("id") or f"policy:{index}"),
                     title=str(entry.get("title", "Policy")),
                     content=content,
                     source="policy",
                     tags=frozenset(str(t).lower() for t in entry.get("tags", [])),
+                    weight=1.15,
+                )
+                for index, entry in enumerate(entries)
+                if isinstance(entry, dict)
+                and (content := str(entry.get("content", "")).strip())
+            ]
+
+        out: list[KnowledgeSnippet] = []
+        for section, body in document.items():
+            content = _as_text(body)
+            if not content:
+                continue
+            words = section.replace("_", " ").split()
+            out.append(
+                KnowledgeSnippet(
+                    id=f"policy:{section}",
+                    title=section.replace("_", " ").capitalize(),
+                    content=content,
+                    source="policy",
+                    # The section name is the strongest signal a user's wording
+                    # will match ("refund" -> refund_policy), so it is a tag too.
+                    tags=frozenset({*(w.lower() for w in words), "policy", "rule"}),
                     weight=1.15,
                 )
             )

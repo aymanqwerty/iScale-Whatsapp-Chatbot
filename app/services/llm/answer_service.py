@@ -15,6 +15,7 @@ from app.services.knowledge.loader import KnowledgeBase
 from app.services.knowledge.models import Audience
 from app.services.knowledge.retriever import KnowledgeRetriever
 from app.services.llm.base import ChatTurn, LLMClient
+from app.services.llm.guardrails import OFF_TOPIC_REPLY, TopicGuard
 from app.services.llm.prompts import (
     FALLBACK_ANSWER,
     build_system_prompt,
@@ -43,6 +44,8 @@ class AnswerResult:
     sources: tuple[str, ...] = ()
     #: True when the LLM failed and the canned fallback was returned instead.
     degraded: bool = False
+    #: True when the topic guard refused before any model call.
+    refused: bool = False
 
 
 class AnswerService:
@@ -52,12 +55,27 @@ class AnswerService:
         llm: LLMClient,
         retriever: KnowledgeRetriever,
         knowledge_base: KnowledgeBase,
+        guard: TopicGuard | None = None,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
         self._kb = knowledge_base
+        self._guard = guard or TopicGuard(knowledge_base)
 
     async def answer(self, request: AnswerRequest) -> AnswerResult:
+        # The gate lives here rather than in the handlers because this is the
+        # only route to the model - a new handler cannot forget to apply it.
+        if self._guard.is_off_topic(request.question):
+            logger.info(
+                "Refused an off-topic message before calling the model",
+                extra={
+                    "state": str(request.state),
+                    "injection": self._guard.is_injection(request.question),
+                    "preview": request.question[:80],
+                },
+            )
+            return AnswerResult(text=OFF_TOPIC_REPLY, refused=True)
+
         course = self._kb.get_course(request.course_slug)
 
         snippets = self._retriever.retrieve(
@@ -71,6 +89,8 @@ class AnswerService:
             state=request.state,
             course_name=course.name if course else None,
             nudge_callback=request.nudge_callback,
+            rules=self._kb.rules,
+            prompt_overrides=self._kb.prompt_overrides,
         )
         user_prompt = build_user_prompt(request.question, snippets)
 

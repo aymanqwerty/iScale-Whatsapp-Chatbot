@@ -45,14 +45,48 @@ _B = 0.75
 #: which stops unrelated context from leaking into the prompt.
 _RELATIVE_CUTOFF = 0.25
 
+#: Applied to course-specific snippets when the user has not chosen a course.
+#: Every course carries near-identical fees/batches/duration snippets, so an
+#: unscoped "what are the fees" would otherwise surface whichever course happens
+#: to score highest - an arbitrary answer to a question that was general. The
+#: penalty is mild, so a query naming a course ("AI engineer fees") still wins
+#: on its own lexical match.
+_UNSCOPED_COURSE_PENALTY = 0.55
+
+
+def _singular(word: str) -> str:
+    """Fold a plural onto its singular so the two forms match.
+
+    Without this, "what is the fee" retrieves nothing: the snippet is titled
+    "fees", and BM25 sees two unrelated terms. It cost the most-asked question
+    in the funnel a correct answer, and sent it to another course's snippet that
+    happened to contain the phrase "no additional fee".
+
+    Deliberately a handful of rules rather than a real stemmer. Index and query
+    both pass through it, so consistency matters far more than linguistic
+    correctness - "analytics" folding to "analytic" is harmless as long as it
+    happens on both sides.
+    """
+    if len(word) <= 3 or not word.endswith("s") or word.endswith("ss"):
+        return word
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"  # queries -> query
+    if word.endswith(("sses", "ches", "shes", "xes", "zes")):
+        return word[:-2]  # batches -> batch, classes -> class
+    return word[:-1]  # fees -> fee, courses -> course
+
 
 def tokenize(text: str) -> list[str]:
-    """Lowercase word tokens plus adjacent bigrams.
+    """Lowercase word tokens plus adjacent bigrams, singularised.
 
     Bigrams matter here: "power bi" and "data science" are single concepts, and
     without them a query for "power bi" scores every snippet containing "data".
     """
-    words = [w for w in _TOKEN_RE.findall(text.lower()) if len(w) > 1 and w not in _STOPWORDS]
+    words = [
+        _singular(w)
+        for w in _TOKEN_RE.findall(text.lower())
+        if len(w) > 1 and w not in _STOPWORDS
+    ]
     bigrams = [f"{a} {b}" for a, b in pairwise(words)]
     return words + bigrams
 
@@ -170,6 +204,9 @@ class KeywordRetriever:
                 elif snippet.course is not None:
                     # Another course's details are usually a distraction.
                     score *= 0.35
+            elif snippet.course is not None:
+                # No course chosen yet - prefer answers that hold for all of them.
+                score *= _UNSCOPED_COURSE_PENALTY
             score *= snippet.weight
 
             if score > 0:
