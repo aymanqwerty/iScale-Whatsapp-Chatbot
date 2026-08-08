@@ -20,6 +20,7 @@ from app.db.session import Database
 from app.domain.enums import MessageSender
 from app.domain.messaging import InboundMessage, OutboundMessage, TurnResult
 from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.lead_repository import LeadRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.user_repository import UserRepository
 from app.services.knowledge.loader import KnowledgeBase
@@ -138,6 +139,7 @@ class ConversationService:
             answer_service=self._answer_service,
             callback_validator=self._callback_validator,
             lead_service=LeadService(session, self._settings),  # type: ignore[arg-type]
+            lead_repository=LeadRepository(session),  # type: ignore[arg-type]
         )
 
     async def _load_history(

@@ -483,3 +483,214 @@ async def test_leads_captured_before_the_sink_existed_are_backfilled(
     assert [record.name for record in harness.sink.pushed] == ["Nishant"]
     leads = await harness.leads()
     assert leads[0].sync_status is SyncStatus.SYNCED
+
+
+# --------------------------------------------------------------------------- #
+# Consistency: deterministic intents beat the model
+# --------------------------------------------------------------------------- #
+async def test_a_greeting_always_returns_the_main_menu(harness: Harness) -> None:
+    """Observed: "hi" mid-conversation got improvised prose and no menu."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say("what are your working hours")
+
+    replies = await harness.say("hi")
+
+    assert await harness.state() == "MAIN_MENU"
+    assert {t for _, t in replies[0].options} == {
+        "Not Enrolled Yet",
+        "Already Enrolled",
+        "Talk to a Counselor",
+    }
+
+
+async def test_a_tapped_menu_row_works_from_any_state(harness: Harness) -> None:
+    """WhatsApp rows stay tappable forever.
+
+    Observed: tapping "Not Enrolled Yet" during Q&A sent the row's title to the
+    model, which answered a question about class recordings.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say("what are your working hours")
+    assert await harness.state() == "GENERAL_QNA"
+
+    replies = await harness.say(reply_id=copy.MENU_COURSES)
+
+    assert await harness.state() == "COURSE_SELECTION"
+    assert any("programs" in r.text for r in replies)
+
+
+async def test_asking_what_courses_exist_shows_the_menu(harness: Harness) -> None:
+    """Observed: the model replied "that's the only course I have information on".
+
+    It sees retrieved snippets, not the catalogue, so it under-reports. The menu
+    is built from courses.json and is always complete.
+    """
+    await harness.say("hi")
+
+    replies = await harness.say("tell me about each and every course available")
+
+    assert await harness.state() == "COURSE_SELECTION"
+    titles = {t for _, t in replies[0].options}
+    assert "AI Engineer Advance Program" in titles
+    assert harness.llm.calls == [], "the model must not be consulted for this"
+
+
+async def test_a_question_is_not_treated_as_a_booking_confirmation(
+    harness: Harness,
+) -> None:
+    """Observed: "i want to know about courses" was read as "yes" and asked for a name."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+
+    await harness.say("i want to know about courses")
+
+    assert await harness.state() != "ASK_NAME"
+
+
+# --------------------------------------------------------------------------- #
+# Booking: name and date given together
+# --------------------------------------------------------------------------- #
+async def test_a_name_given_while_answering_the_time_is_kept(
+    harness: Harness,
+) -> None:
+    """Observed: the lead went out under the previous name."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COUNSELOR)
+    await harness.say("Akshat Trivedi")
+
+    await harness.say("my name is Ayush Raj and schedule the call for 11 august at 4 pm")
+    await harness.say("skip")
+
+    leads = await harness.leads()
+    assert leads[0].name == "Ayush Raj"
+
+
+async def test_a_rejected_time_keeps_the_date_the_user_gave(
+    harness: Harness,
+) -> None:
+    """Observed: "10 august at 4:30 am" was refused, and "4:30 pm then" silently
+    booked today instead of the 10th. The counselor calls on the wrong day and
+    the lead is wasted."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COUNSELOR)
+    await harness.say("Akshat Trivedi")
+
+    # 4:30 am is outside calling hours, so this is rejected.
+    await harness.say("schedule the call for 10 august at 4:30 am")
+    # Only a time - the day must carry over from the rejected attempt.
+    await harness.say("do for 4:30 pm then")
+    await harness.say("skip")
+
+    leads = await harness.leads()
+    assert leads[0].preferred_time is not None
+    assert leads[0].preferred_time.day == 10
+
+
+# --------------------------------------------------------------------------- #
+# Rescheduling
+# --------------------------------------------------------------------------- #
+async def _book(harness: Harness, when: str) -> int:
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COUNSELOR)
+    await harness.say("Ayman Akram")
+    await harness.say(when)
+    await harness.say("skip")
+    leads = await harness.leads()
+    return int(leads[0].id)
+
+
+async def test_rescheduling_moves_the_same_lead(harness: Harness) -> None:
+    """One row, its time changed - not a second booking.
+
+    A duplicate would put the same person on the counselor's list twice with
+    two different times, which is exactly the confusion rescheduling exists to
+    remove.
+    """
+    lead_id = await _book(harness, "monday 4pm")
+
+    await harness.say("i want to reschedule my call")
+    await harness.say("tuesday 5pm")
+    replies = await harness.say("skip")
+
+    leads = await harness.leads()
+    assert len(leads) == 1, "rescheduling must not create a second lead"
+    assert int(leads[0].id) == lead_id
+    assert leads[0].preferred_time is not None
+    assert leads[0].preferred_time.day == 11
+    assert "moved" in harness.texts(replies).lower()
+
+
+async def test_rescheduling_marks_the_lead_for_resync(harness: Harness) -> None:
+    """The sheet must be brought back in line, or it keeps showing the old time."""
+    await _book(harness, "monday 4pm")
+
+    await harness.say("i want to reschedule my call")
+    await harness.say("tuesday 5pm")
+    await harness.say("skip")
+
+    leads = await harness.leads()
+    assert leads[0].sync_status in (SyncStatus.PENDING, SyncStatus.SYNCED)
+
+
+async def test_booking_again_offers_to_move_the_existing_call(
+    harness: Harness,
+) -> None:
+    """Observed in testing: a user booked twice without noticing.
+
+    Silently adding a second booking sends a counselor to ring the same person
+    twice; silently replacing it loses a call someone may genuinely want. Ask.
+    """
+    await _book(harness, "monday 4pm")
+
+    replies = await harness.say("i want to talk to a counsellor")
+
+    assert {oid for oid, _ in replies[-1].options} == {
+        copy.RESCHEDULE_MOVE,
+        copy.RESCHEDULE_NEW,
+    }
+    assert "already have a call booked" in replies[-1].text
+
+
+async def test_choosing_book_another_creates_a_second_lead(
+    harness: Harness,
+) -> None:
+    """Someone who genuinely wants two calls must be able to have them."""
+    await _book(harness, "monday 4pm")
+
+    await harness.say("i want to talk to a counsellor")
+    await harness.say(reply_id=copy.RESCHEDULE_NEW)
+    await harness.say("wednesday 12pm")
+    await harness.say("skip")
+
+    leads = await harness.leads()
+    assert len(leads) == 2
+
+
+async def test_reschedule_with_nothing_booked_starts_a_booking(
+    harness: Harness,
+) -> None:
+    """Nothing to move - take it as a request for a call rather than an error."""
+    await harness.say("hi")
+
+    replies = await harness.say("i want to reschedule my call")
+
+    assert "can't find" in harness.texts(replies).lower()
+    assert await harness.state() in ("ASK_NAME", "ASK_CALLBACK_TIME")
+
+
+async def test_the_booked_time_is_shown_in_business_timezone(
+    harness: Harness,
+) -> None:
+    """Regression: a 4 PM booking was read back to the user as 10:30 AM.
+
+    The column stores the absolute instant, so a value from the database
+    arrives in UTC. Correct to the second, and useless to the reader.
+    """
+    await _book(harness, "monday 4pm")
+
+    replies = await harness.say("i want to reschedule my call")
+
+    assert "4 PM" in harness.texts(replies)
+    assert "10:30" not in harness.texts(replies)

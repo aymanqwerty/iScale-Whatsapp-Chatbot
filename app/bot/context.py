@@ -8,6 +8,7 @@ from app.core.config import Settings
 from app.db.models.conversation import Conversation
 from app.db.models.user import User
 from app.domain.messaging import InboundMessage
+from app.repositories.lead_repository import LeadRepository
 from app.services.knowledge.loader import KnowledgeBase
 from app.services.lead_service import LeadService
 from app.services.llm.answer_service import AnswerService
@@ -23,6 +24,13 @@ CTX_PENDING_TIME_RAW = "pending_time_raw"
 CTX_SUPPORT_TOPIC = "support_topic"
 CTX_RETURN_STATE = "return_state"          # where to resume if a callback is declined
 CTX_NAME_ATTEMPTS = "name_attempts"
+#: The date the user named on a rejected attempt, so a follow-up that gives
+#: only a time ("4:30 pm then") lands on the day they actually asked for.
+CTX_PENDING_DATE = "pending_date"
+#: Set while moving an existing booking. When present at the end of the flow the
+#: lead is UPDATED rather than a second one created, so the counselor never sees
+#: the same person twice with two different times.
+CTX_RESCHEDULE_LEAD_ID = "reschedule_lead_id"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +46,10 @@ class BotDependencies:
     answer_service: AnswerService
     callback_validator: CallbackTimeValidator
     lead_service: LeadService
+    #: The lead repository, for the reschedule flow. Handlers need to look up a
+    #: booking made in an *earlier* conversation, which `lead_service` (scoped
+    #: to creating one) cannot answer.
+    lead_repository: LeadRepository
 
 
 @dataclass(slots=True)

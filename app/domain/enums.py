@@ -27,6 +27,8 @@ class ConversationState(StrEnum):
 
     # Shared callback-capture branch
     ASK_CALLBACK = "ASK_CALLBACK"
+    #: "You already have a call booked - move it, or add another?"
+    CONFIRM_RESCHEDULE = "CONFIRM_RESCHEDULE"
     ASK_NAME = "ASK_NAME"
     ASK_CALLBACK_TIME = "ASK_CALLBACK_TIME"
     ASK_REMARKS = "ASK_REMARKS"

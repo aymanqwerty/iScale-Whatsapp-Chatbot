@@ -15,6 +15,7 @@ from app.bot.handlers.callback import (
     handle_ask_callback_time,
     handle_ask_name,
     handle_ask_remarks,
+    handle_confirm_reschedule,
     handle_end,
     handle_lead_created,
 )
@@ -43,6 +44,7 @@ HANDLERS: dict[ConversationState, StateHandler] = {
     ConversationState.POST_SALES: handle_post_sales,
     ConversationState.SUPPORT_QUERY: handle_support_query,
     ConversationState.SUPPORT_CALLBACK: handle_support_callback,
+    ConversationState.CONFIRM_RESCHEDULE: handle_confirm_reschedule,
     ConversationState.ASK_CALLBACK: handle_ask_callback,
     ConversationState.ASK_NAME: handle_ask_name,
     ConversationState.ASK_CALLBACK_TIME: handle_ask_callback_time,

@@ -12,6 +12,7 @@ from __future__ import annotations
 from app.bot import copy, intents
 from app.bot.context import CTX_NUDGED, CTX_QNA_COUNT, TurnContext
 from app.bot.handlers import HANDLERS
+from app.bot.handlers.callback import describe_slot, start_reschedule
 from app.bot.handlers.common import start_callback_capture
 from app.core.logging import get_logger
 from app.domain.enums import (
@@ -37,7 +38,7 @@ class ConversationMachine:
             result.add(OutboundMessage(text=copy.UNSUPPORTED_MESSAGE))
             return result
 
-        override = self._global_command(ctx)
+        override = await self._global_command(ctx)
         if override is not None:
             return override
 
@@ -61,8 +62,13 @@ class ConversationMachine:
         return result
 
     # ------------------------------------------------------------------ #
-    def _global_command(self, ctx: TurnContext) -> TurnResult | None:
+    async def _global_command(self, ctx: TurnContext) -> TurnResult | None:
         """Commands that work from (almost) any state.
+
+        This is what makes the bot predictable. Anything resolved here never
+        reaches the model, so "hi" cannot come back as improvised prose and
+        "what courses do you have" cannot come back as one course out of eight.
+        The model answers questions; it never decides where the conversation is.
 
         Deliberately suppressed during callback capture: a user answering the
         name question with "Menu" is far less likely than one whose free-text
@@ -73,7 +79,11 @@ class ConversationMachine:
         state = conversation.current_state
         text = ctx.text
 
-        # A tapped button is an answer to the question just asked, never a command.
+        navigation = self._tapped_navigation(ctx)
+        if navigation is not None:
+            return navigation
+
+        # Any other tapped button answers the question just asked.
         if ctx.inbound.reply_id:
             return None
 
@@ -86,15 +96,133 @@ class ConversationMachine:
             result.add(copy.main_menu(copy.SESSION_RESTART))
             return result
 
+        # A greeting is an opener, not a question. Answering it with the menu
+        # gives every conversation the same predictable starting point, however
+        # far into the flow the user has wandered.
+        if intents.is_greeting(text) and not in_capture:
+            self._reset_flow(ctx)
+            conversation.current_state = ConversationState.MAIN_MENU
+            result = TurnResult()
+            result.add(
+                copy.welcome_message(ctx.company, returning_name=ctx.user.name)
+            )
+            return result
+
+        asks_for_catalogue = intents.wants_course_list(
+            text, course_selected=conversation.current_course is not None
+        )
+        if asks_for_catalogue and not in_capture:
+            conversation.current_state = ConversationState.COURSE_SELECTION
+            conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
+            result = TurnResult()
+            result.add(copy.course_menu(ctx.deps.knowledge_base))
+            return result
+
+        # Checked before `wants_human`, which would otherwise start a fresh
+        # capture and leave the original call still on the counselor's list.
+        if intents.wants_reschedule(text) and not in_capture:
+            logger.info("Reschedule requested", extra={"state": str(state)})
+            return await start_reschedule(ctx)
+
         if (
             intents.wants_human(text)
             and not in_capture
             and state
-            not in (ConversationState.ASK_CALLBACK, ConversationState.SUPPORT_CALLBACK)
+            not in (
+                ConversationState.ASK_CALLBACK,
+                ConversationState.SUPPORT_CALLBACK,
+                ConversationState.CONFIRM_RESCHEDULE,
+            )
         ):
             lead_type = conversation.lead_type or LeadType.PRE_SALES
             logger.info("Escalation requested by user", extra={"state": str(state)})
+            return await self._start_or_offer_move(ctx, lead_type)
+
+        return None
+
+    async def _start_or_offer_move(
+        self, ctx: TurnContext, lead_type: LeadType
+    ) -> TurnResult:
+        """Begin a booking, unless one is already on the books.
+
+        Booking twice is nearly always an accident - the user forgot, or thought
+        the first attempt had failed. Sending a counselor to ring the same
+        person twice wastes their time and looks careless, so we ask.
+        """
+        existing = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+        if existing is None:
             return start_callback_capture(ctx, lead_type=lead_type)
+
+        ctx.conversation.current_state = ConversationState.CONFIRM_RESCHEDULE
+        result = TurnResult()
+        result.add(copy.reschedule_choice(describe_slot(existing, ctx.deps.settings.tz)))
+        return result
+
+    def _tapped_navigation(self, ctx: TurnContext) -> TurnResult | None:
+        """Honour a tapped navigation button from any state.
+
+        WhatsApp messages never expire, so a user can scroll up and tap a menu
+        row sent twenty minutes ago. Previously every tap was treated as an
+        answer to the *current* question, so tapping "Not Enrolled Yet" during
+        Q&A sent the row's title to the model as free text - which answered a
+        question nobody asked and then offered a callback.
+
+        Only navigation ids are handled here. `confirm:yes`, `support:*` and the
+        like are answers to a specific question and must stay with the handler
+        that asked it.
+        """
+        reply_id = ctx.inbound.reply_id
+        if not reply_id:
+            return None
+
+        conversation = ctx.conversation
+        if conversation.current_state in CALLBACK_CAPTURE_STATES:
+            # Mid-form: a stray tap must not discard a half-captured booking.
+            return None
+
+        if reply_id == copy.MENU_COURSES:
+            self._reset_flow(ctx)
+            conversation.current_state = ConversationState.COURSE_SELECTION
+            conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
+            result = TurnResult()
+            result.add(copy.course_menu(ctx.deps.knowledge_base))
+            return result
+
+        if reply_id == copy.MENU_ENROLLED:
+            self._reset_flow(ctx)
+            conversation.current_state = ConversationState.POST_SALES
+            conversation.lead_type = LeadType.POST_SALES
+            result = TurnResult()
+            result.add(copy.support_menu())
+            return result
+
+        if reply_id == copy.MENU_COUNSELOR:
+            lead_type = conversation.lead_type or LeadType.PRE_SALES
+            return start_callback_capture(ctx, lead_type=lead_type)
+
+        if reply_id == copy.COURSE_OTHERS:
+            conversation.current_state = ConversationState.COURSE_SELECTION
+            result = TurnResult()
+            result.add(copy.other_courses_menu(ctx.deps.knowledge_base))
+            return result
+
+        # A course row: select it wherever the user happens to be.
+        if reply_id.startswith(copy.COURSE_PREFIX) and reply_id != copy.COURSE_UNSURE:
+            slug = reply_id.removeprefix(copy.COURSE_PREFIX)
+            course = ctx.deps.knowledge_base.get_course(slug)
+            if course is not None:
+                conversation.current_state = ConversationState.COURSE_QNA
+                conversation.current_course = course.slug
+                conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
+                result = TurnResult()
+                result.add(
+                    OutboundMessage(
+                        text=copy.COURSE_SELECTED.format(
+                            course=course.name, summary=course.summary_line()
+                        )
+                    )
+                )
+                return result
 
         return None
 
