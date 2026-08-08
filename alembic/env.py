@@ -21,6 +21,7 @@ import app.db.models  # noqa: F401
 from alembic import context
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.session import engine_kwargs
 
 config = context.config
 
@@ -70,10 +71,19 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    # Alembic builds its own engine, so the pooler handling in
+    # `app.db.session` does not apply here. Behind a transaction-mode pooler
+    # (Supabase, PgBouncer) asyncpg's prepared-statement cache raises
+    # `DuplicatePreparedStatementError` before the first migration runs -
+    # SQLAlchemy's own dialect startup issues enough statements to collide.
+    # Reusing the same decision keeps the two paths from drifting apart.
+    connect_args = engine_kwargs(settings).get("connect_args", {})
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

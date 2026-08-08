@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -62,13 +63,23 @@ def engine_kwargs(settings: Settings) -> dict[str, object]:
         kwargs["pool_recycle"] = 1800
 
     if _is_transaction_pooler(settings.database_url):
-        # Turning the cache off is the supported way to run asyncpg through a
-        # transaction pooler. Costs one extra parse per statement, which is
-        # nothing next to the network hop, and removes a whole class of
-        # heisenbug.
+        # Three settings, because the obvious two are not enough.
+        #
+        # `statement_cache_size=0` stops asyncpg caching, and
+        # `prepared_statement_cache_size=0` stops SQLAlchemy's dialect caching.
+        # Neither prevents the actual failure: SQLAlchemy still names each
+        # prepared statement `__asyncpg_stmt_N__` from a per-connection
+        # counter, and behind a transaction pooler two application connections
+        # can land on the same backend with the same counter - so the name
+        # collides and Postgres raises DuplicatePreparedStatementError.
+        #
+        # Making the names unique removes the collision at its source. Observed
+        # failing intermittently against Supabase's pooler with only the first
+        # two set.
         kwargs["connect_args"] = {
             "statement_cache_size": 0,
             "prepared_statement_cache_size": 0,
+            "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
         }
     return kwargs
 
