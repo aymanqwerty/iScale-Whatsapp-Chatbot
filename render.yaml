@@ -41,8 +41,6 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
-      - key: WHATSAPP_ALLOWED_NUMBERS
-        sync: false
       # Render's filesystem is ephemeral, so the service-account FILE cannot be
       # used. Paste the whole JSON key into this variable instead - the loader
       # accepts either.
@@ -68,10 +66,13 @@ services:
         value: "true"
       - key: WHATSAPP_API_VERSION
         value: v21.0
-      # Stays ON for the soft launch. Turning it off is the moment real
-      # customers reach the bot - do that deliberately, not on first deploy.
+      # OFF: this is production and every customer should reach the bot.
+      # With this false, WHATSAPP_ALLOWED_NUMBERS is ignored entirely.
+      #
+      # Set it back to "true" (with numbers listed) only to re-close the bot -
+      # for instance while testing a risky change against live traffic.
       - key: WHATSAPP_ALLOWLIST_ENABLED
-        value: "true"
+        value: "false"
       - key: GOOGLE_SHEETS_ENABLED
         value: "true"
       - key: GOOGLE_SHEETS_WORKSHEET_NAME

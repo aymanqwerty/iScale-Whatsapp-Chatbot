@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import ContainerDep, ConversationServiceDep
@@ -20,7 +20,25 @@ from app.services.whatsapp.base import MessagingClient
 from app.services.whatsapp.guarded_client import GuardedMessagingClient
 from app.services.whatsapp.logging_client import LoggingMessagingClient
 
-router = APIRouter(prefix="/simulate", tags=["simulate"])
+
+def _dev_only(container: ContainerDep) -> None:
+    """Refuse the whole simulator outside development.
+
+    Every route here is a development aid and none should exist in production:
+    `POST /simulate` lets a caller act as ANY phone number, and
+    `GET /simulate/allowlist` discloses which numbers the bot will talk to.
+
+    The check used to live inside the POST handler alone, which left the
+    diagnostics readable by anyone who found the URL. Declaring it on the
+    router means a route added here is closed by default.
+    """
+    if container.settings.is_production:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not available")
+
+
+router = APIRouter(
+    prefix="/simulate", tags=["simulate"], dependencies=[Depends(_dev_only)]
+)
 
 
 class SimulateRequest(BaseModel):
@@ -49,11 +67,7 @@ async def simulate(
     container: ContainerDep,
     conversation_service: ConversationServiceDep,
 ) -> SimulateResponse:
-    if container.settings.is_production:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Not available"
-        )
-
+    # The production check is on the router, so it covers every route here.
     inbound = InboundMessage(
         wa_message_id=f"sim-{uuid.uuid4().hex}",
         from_phone=payload.phone,
