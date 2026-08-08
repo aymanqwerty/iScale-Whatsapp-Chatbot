@@ -333,3 +333,24 @@ def test_missing_lead_returns_404(client: TestClient) -> None:
 
 def test_openapi_is_served_outside_production(client: TestClient) -> None:
     assert client.get("/openapi.json").status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# Uptime monitors send HEAD
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("path", ["/", "/api/v1/health", "/api/v1/health/ready"])
+def test_head_is_accepted_wherever_get_is(client: TestClient, path: str) -> None:
+    """UptimeRobot and friends send HEAD by default to avoid a response body.
+
+    FastAPI - unlike plain Starlette - does not add HEAD to a GET route, so
+    every ping returned 405. The monitor reported the service down and the
+    keep-alive that stops a free instance sleeping never landed.
+    """
+    assert client.head(path).status_code == 200
+    assert client.get(path).status_code == 200
+
+
+def test_unsupported_methods_are_still_refused(client: TestClient) -> None:
+    """Widening to HEAD must not open the endpoint to anything else."""
+    assert client.post("/api/v1/health").status_code == 405
+    assert client.delete("/api/v1/health").status_code == 405

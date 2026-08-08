@@ -64,7 +64,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(api_router, prefix=settings.api_prefix)
 
-    @app.get("/", include_in_schema=False)
+    # HEAD as well as GET: uptime monitors default to HEAD, and a 405 there
+    # reads as an outage.
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
     async def root() -> dict[str, str]:
         return {
             "service": settings.app_name,

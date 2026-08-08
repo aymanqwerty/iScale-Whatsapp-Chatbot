@@ -15,13 +15,22 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", summary="Liveness probe")
+@router.api_route("/health", methods=["GET", "HEAD"], summary="Liveness probe")
 async def health() -> dict[str, str]:
-    """Cheap check - the process is up. Never touches a dependency."""
+    """Cheap check - the process is up. Never touches a dependency.
+
+    HEAD is accepted as well as GET. Uptime monitors (UptimeRobot among them)
+    send HEAD by default to avoid transferring a body, and FastAPI - unlike
+    plain Starlette - does not add HEAD to a GET route automatically. The
+    result was a 405 on every ping: the monitor reported the service down, and
+    the keep-alive that stops a free instance sleeping never landed.
+    """
     return {"status": "ok"}
 
 
-@router.get("/health/ready", summary="Readiness probe")
+@router.api_route(
+    "/health/ready", methods=["GET", "HEAD"], summary="Readiness probe"
+)
 async def readiness(container: ContainerDep, response: Response) -> dict[str, Any]:
     """Reports each dependency. 503 when the database is unreachable.
 
