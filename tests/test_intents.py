@@ -22,10 +22,31 @@ def _inbound(text: str = "", reply_id: str | None = None) -> InboundMessage:
 
 @pytest.mark.parametrize(
     "text", ["yes", "Yes!", "yeah", "sure", "ok", "haan", "yes please", "please do",
-             "sounds good", "of course", "call me"]
+             "sounds good", "of course", "do it", "go ahead"]
 )
 def test_affirmative(text: str) -> None:
     assert intents.is_affirmative(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Observed in production: each of these was read as "yes" and pushed the
+        # user straight into the callback form instead of answering them.
+        "i want to know about courses",
+        "i want to know the fees",
+        "i would like to see the syllabus",
+        "id like to know the duration",
+    ],
+)
+def test_a_question_starting_with_i_want_is_not_a_yes(text: str) -> None:
+    assert not intents.is_affirmative(text)
+
+
+def test_call_me_is_a_human_request_not_a_yes() -> None:
+    """It belongs to `wants_human`; the callback handler checks both."""
+    assert intents.wants_human("call me")
+    assert not intents.is_affirmative("call me")
 
 
 @pytest.mark.parametrize(
@@ -174,3 +195,74 @@ def test_free_form_callback_requests_escalate(text: str) -> None:
 def test_ordinary_questions_do_not_escalate(text: str) -> None:
     """A false positive only offers a callback, but it derails a real question."""
     assert not intents.wants_human(text)
+
+
+# --------------------------------------------------------------------------- #
+# Generalisation - these phrasings were never in the reported transcript
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "text",
+    ["hello", "hey there", "namaste", "namaskar", "hola", "good morning",
+     "good evening", "gm", "salaam", "kaise ho", "hii there", "yo"],
+)
+def test_greetings_beyond_the_reported_examples(text: str) -> None:
+    assert intents.is_greeting(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "what courses do you have",
+        "which programs are there",
+        "share the course list",
+        "do you have any courses",
+        "send me the list of courses",
+        "what all do you teach",
+        "what can i learn here",
+        "show me what you offer",
+        "i want to see your programs",
+        "what trainings do you provide",
+        # Hinglish - a large share of real traffic, and missed entirely by the
+        # first phrase-list implementation.
+        "kya kya courses hain",
+        "course batao",
+        "aapke paas kaunse courses hain",
+    ],
+)
+def test_catalogue_requests_generalise(text: str) -> None:
+    assert intents.wants_course_list(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Questions ABOUT a course must reach the model with that course's
+        # knowledge, not be swallowed by the menu.
+        "how long is the course",
+        "what does the course cost",
+        "is the course online",
+        "what is the fee for data science",
+        "what is the syllabus",
+        "do you have weekend batches",
+        "when does the batch start",
+        "can i get a certificate",
+        # A greeting followed by a real question is a question.
+        "hi what are the fees",
+        "good morning what is the price",
+    ],
+)
+def test_course_questions_are_not_catalogue_requests(text: str) -> None:
+    assert not intents.wants_course_list(text)
+
+
+def test_verb_only_asks_defer_to_a_selected_course() -> None:
+    """"What will I learn" means different things depending on where you are.
+
+    With a course chosen it is a question about that course; with none chosen
+    it is a request for the catalogue.
+    """
+    assert intents.wants_course_list("what will i learn", course_selected=False)
+    assert not intents.wants_course_list("what will i learn", course_selected=True)
+
+    # Naming the noun is unambiguous either way.
+    assert intents.wants_course_list("what courses do you have", course_selected=True)

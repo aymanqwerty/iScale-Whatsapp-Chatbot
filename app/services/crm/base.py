@@ -23,6 +23,10 @@ from app.db.models.lead import Lead
 #: split so a plain equals-today filter on one column answers it, and the
 #: user's own wording is kept alongside for context.
 LEAD_COLUMNS: tuple[str, ...] = (
+    # First column and rarely interesting to a human, but it is what lets a
+    # rescheduled call update its own row instead of appending a second one
+    # showing the old time. Without a key there is nothing to match on.
+    "Lead ID",
     "Date",
     "Phone",
     "Name",
@@ -92,6 +96,7 @@ class LeadRecord:
         and time cells into real date/time values rather than storing text.
         """
         return [
+            str(self.lead_id or ""),
             self.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             self.phone,
             self.name,

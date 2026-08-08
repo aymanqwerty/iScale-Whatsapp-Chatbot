@@ -18,7 +18,7 @@ bot asks again with examples.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 from zoneinfo import ZoneInfo
@@ -70,6 +70,11 @@ class CallbackParseResult:
 
     slot: CallbackSlot | None = None
     reason: RejectionReason | None = None
+    #: The date the user named, kept even when the slot was rejected.
+    #: "10 August at 4:30 am" is refused for being before opening time, but the
+    #: user did say the 10th - and a follow-up "4:30 pm then" must land on that
+    #: day, not today. Without this the booking silently moved to the wrong date.
+    parsed_date: date | None = None
     #: Populated on rejection - the next few open slots, to offer as examples.
     suggestions: tuple[CallbackSlot, ...] = ()
 
@@ -143,8 +148,20 @@ class CallbackTimeValidator:
     def now(self) -> datetime:
         return datetime.now(self._tz)
 
-    def parse(self, text: str, *, now: datetime | None = None) -> CallbackParseResult:
-        """Parse `text` into a validated slot, or explain why it was rejected."""
+    def parse(
+        self,
+        text: str,
+        *,
+        now: datetime | None = None,
+        assume_date: date | None = None,
+    ) -> CallbackParseResult:
+        """Parse `text` into a validated slot, or explain why it was rejected.
+
+        `assume_date` is the date the user gave on a previous, rejected attempt.
+        It is used only when this message carries a time but no date, so
+        "10 August at 4:30 am" followed by "4:30 pm then" books the 10th rather
+        than silently jumping to today.
+        """
         reference = (now or self.now()).astimezone(self._tz)
         cleaned = text.strip().lower()
 
@@ -163,15 +180,21 @@ class CallbackTimeValidator:
             reason = (
                 RejectionReason.MISSING_TIME if date_found else RejectionReason.NOT_UNDERSTOOD
             )
-            return self._reject(reason, reference)
+            rejected = self._reject(reason, reference)
+            return replace(rejected, parsed_date=target_date if date_found else None)
 
         if not date_found:
-            # Time only ("4 pm"): today if that is still reachable, else the next
-            # working day at the same time.
-            target_date = self._resolve_implicit_date(target_time, reference)
+            if assume_date is not None and assume_date >= reference.date():
+                target_date = assume_date
+                date_found = True
+            else:
+                # Time only ("4 pm"): today if that is still reachable, else the
+                # next working day at the same time.
+                target_date = self._resolve_implicit_date(target_time, reference)
 
         candidate = datetime.combine(target_date, target_time, tzinfo=self._tz)
-        return self._validate(candidate, text.strip(), reference)
+        result = self._validate(candidate, text.strip(), reference)
+        return replace(result, parsed_date=target_date if date_found else None)
 
     def is_within_business_hours(self, moment: datetime) -> bool:
         local = moment.astimezone(self._tz)

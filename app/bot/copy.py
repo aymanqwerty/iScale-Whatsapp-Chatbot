@@ -28,6 +28,9 @@ COURSE_OTHERS = "course:others"
 
 SUPPORT_PREFIX = "support:"
 
+RESCHEDULE_MOVE = "reschedule:move"
+RESCHEDULE_NEW = "reschedule:new"
+
 CONFIRM_YES = "confirm:yes"
 CONFIRM_NO = "confirm:no"
 
@@ -324,3 +327,42 @@ def time_rejection(reason: str, *, hours: str, suggestions: list[str]) -> str:
         parts.append(f"For example: {options}")
     parts.append("What time works for you?")
     return "\n\n".join(parts)
+
+
+# --------------------------------------------------------------------------- #
+# Rescheduling
+# --------------------------------------------------------------------------- #
+RESCHEDULE_PROMPT = (
+    "You have a call booked for {when}.\n\n"
+    "What time would suit you better?\n\n"
+    "Our hours are {hours}."
+)
+
+RESCHEDULE_DONE = (
+    "Done - your call has been moved to {when}. ✅\n\n"
+    "The earlier slot has been released."
+)
+
+RESCHEDULE_NOTHING_BOOKED = (
+    "I can't find an upcoming call booked for this number. "
+    "Shall I arrange one for you?"
+)
+
+
+def reschedule_choice(when: str) -> OutboundMessage:
+    """Asked when someone books again while a call is already on the books.
+
+    Almost always an accident - the user forgot, or thought the first attempt
+    failed. Silently adding a second booking sends a counselor to ring twice;
+    silently replacing it loses a call someone genuinely wanted.
+    """
+    return OutboundMessage(
+        text=(
+            f"You already have a call booked for {when}.\n\n"
+            "Would you like to move that one, or book an additional call?"
+        ),
+        buttons=(
+            Button(id=RESCHEDULE_MOVE, title="Move it"),
+            Button(id=RESCHEDULE_NEW, title="Book another"),
+        ),
+    )

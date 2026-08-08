@@ -111,7 +111,25 @@ class GoogleSheetsLeadSink:
             await asyncio.to_thread(self._apply_date_formats, service)
 
     def _append_row(self, service: Any, row: list[str]) -> None:
-        """Blocking append - runs in a worker thread."""
+        """Upsert by lead id - update the row if present, else append.
+
+        A rescheduled call must not leave its old time sitting in the sheet: the
+        counselor would see two rows and have to guess which is live. Matching
+        on the Lead ID column keeps one row per lead.
+        """
+        lead_id = row[0] if row else ""
+        existing = self._find_row(service, lead_id) if lead_id else None
+
+        if existing is not None:
+            service.spreadsheets().values().update(
+                spreadsheetId=self._spreadsheet_id,
+                range=f"{self._worksheet}!A{existing}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [row]},
+            ).execute()
+            logger.info("Updated existing sheet row", extra={"row": existing})
+            return
+
         service.spreadsheets().values().append(
             spreadsheetId=self._spreadsheet_id,
             range=f"{self._worksheet}!A:A",
@@ -119,6 +137,30 @@ class GoogleSheetsLeadSink:
             insertDataOption="INSERT_ROWS",
             body={"values": [row]},
         ).execute()
+
+    def _find_row(self, service: Any, lead_id: str) -> int | None:
+        """1-based sheet row for this lead, or None if it is not there yet.
+
+        Reads only column A. Best-effort: on any failure we fall back to
+        appending, because a duplicate row is a far better outcome than a lost
+        lead.
+        """
+        try:
+            result = (
+                service.spreadsheets()
+                .values()
+                .get(spreadsheetId=self._spreadsheet_id, range=f"{self._worksheet}!A:A")
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning("Could not scan the sheet for an existing row",
+                           extra={"error": str(exc)})
+            return None
+
+        for index, cells in enumerate(result.get("values", []), start=1):
+            if cells and str(cells[0]).strip() == lead_id:
+                return index
+        return None
 
     # ------------------------------------------------------------------ #
     async def _ensure_header(self, service: Any) -> None:

@@ -92,3 +92,46 @@ class LeadRepository:
         lead.sync_status = SyncStatus.SKIPPED
         await self._session.flush()
         return lead
+
+    async def find_upcoming_callback(self, phone: str) -> Lead | None:
+        """The most recent still-open callback booked for this number.
+
+        "Open" means a counselor has not yet worked it (`NEW`) and the slot has
+        not already passed. A lead that is CONTACTED or in the past is history:
+        rescheduling it would rewrite a call that already happened.
+        """
+        result = await self._session.execute(
+            select(Lead)
+            .where(
+                Lead.phone == phone,
+                Lead.status == LeadStatus.NEW,
+                Lead.preferred_time.is_not(None),
+                Lead.preferred_time >= datetime.now(UTC),
+            )
+            .order_by(Lead.preferred_time.asc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
+    async def reschedule(
+        self,
+        lead: Lead,
+        *,
+        preferred_time: datetime,
+        preferred_time_raw: str | None = None,
+    ) -> Lead:
+        """Move an existing booking to a new slot.
+
+        The row is updated rather than replaced so the counselor sees one entry
+        with the correct time - a second row showing the old slot is exactly the
+        confusion a reschedule is meant to remove. `sync_status` returns to
+        PENDING so the sheet is brought back into line.
+        """
+        lead.preferred_time = preferred_time
+        if preferred_time_raw is not None:
+            lead.preferred_time_raw = preferred_time_raw
+        lead.sync_status = SyncStatus.PENDING
+        lead.synced_at = None
+        lead.sync_error = None
+        await self._session.flush()
+        return lead

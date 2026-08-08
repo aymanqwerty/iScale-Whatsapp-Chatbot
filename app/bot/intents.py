@@ -21,10 +21,15 @@ _AFFIRMATIVE = frozenset(
     """.split()
 )
 
+#: Only unambiguous confirmations belong here, because a false positive turns a
+#: question into a booking. "i want", "id like" and "call me" were removed after
+#: "i want to know about courses" and "i want to know the fees" were both read
+#: as "yes" and pushed the user straight into the callback form. A request to
+#: speak to someone is `wants_human`'s job, not this one.
 _AFFIRMATIVE_PHRASES = (
-    "yes please", "go ahead", "sounds good", "that works", "why not", "of course",
-    "call me", "id like", "i would like", "i want", "please do", "lets do",
-    "let's do", "sure thing",
+    "yes please", "yes do", "go ahead", "sounds good", "that works", "why not",
+    "of course", "please do", "lets do", "let's do", "sure thing", "do it",
+    "that would be great", "that'd be great",
 )
 
 _NEGATIVE = frozenset(
@@ -61,6 +66,57 @@ _ASK_VERB = (
 _CALL_WORD = r"(?:call\s?back|callback|calls|call|cal)"
 _HUMAN_RE = re.compile(rf"\b{_ASK_VERB}\b[\w\s']{{0,24}}?\b{_CALL_WORD}\b")
 
+#: Asking what is on offer. Answered with the course menu, never with prose:
+#: the model once replied "that's the only course I have information on" while
+#: eight courses were loaded, because it sees retrieved snippets, not the
+#: catalogue.
+#:
+#: Composed from three signals rather than a list of exact phrases. A fixed
+#: phrase list looked fine against the examples it was written from and then
+#: missed "what all do you teach", "do you have any courses" and every Hinglish
+#: form - which is most of the real traffic.
+_CATALOGUE_NOUNS = frozenset(
+    """
+    course courses program programs programme programmes training trainings
+    class classes syllabus curriculum
+    """.split()
+)
+
+#: Words that turn a noun into "show me the list".
+_CATALOGUE_ASKS = frozenset(
+    """
+    what which list show tell share send see explore know have has offer offers
+    offered teach teaches taught provide provides available availabe all every
+    each any options option about kind kinds type types
+    kya kaun kaunsa konsa konse batao dikhao bata hai hain
+    """.split()
+)
+
+#: Asking ABOUT a course, not asking WHICH courses exist. These win, because
+#: "how long is the course" must reach the model with the course's own snippets.
+_COURSE_ATTRIBUTE_WORDS = frozenset(
+    """
+    fee fees cost costs price pricing charge charges emi installment instalment
+    discount scholarship refund duration long month months week weeks
+    eligibility eligible prerequisite requirement syllabus module modules topic
+    topics project projects certificate certification placement job salary
+    batch batches timing timings schedule demo trial start starts begin
+    online offline mode language recorded live
+    """.split()
+)
+
+#: Moving an existing booking rather than making a new one. Checked before
+#: `wants_human`, which would otherwise start a fresh capture and leave the
+#: original call still on the counselor's list.
+_RESCHEDULE_PHRASES = (
+    "reschedule", "re schedule", "resched", "change my call", "change the call",
+    "change my appointment", "move my call", "move the call", "shift my call",
+    "shift the call", "postpone", "prepone", "another time", "different time",
+    "change the time", "change my time", "change timing", "change my slot",
+    "cancel and rebook", "call me later instead", "not that time",
+    "samay badal", "time change kar", "call aage badha",
+)
+
 _MENU_WORDS = frozenset(
     """
     menu options home back restart reset start begin main
@@ -71,9 +127,17 @@ _MENU_PHRASES = ("main menu", "go back", "start over", "start again", "show opti
 
 _GREETINGS = frozenset(
     """
-    hi hii hiii hello helo hey heyy hlo start namaste namaskar salaam hola yo
-    greetings sup
+    hi hii hiii hiiii hello helo hellow hey heyy heyyy hlo hyy start namaste
+    namaskar namaskaar salaam salam assalam hola yo greetings sup gm gn
+    good morning afternoon evening
     """.split()
+)
+
+#: Two-word openers, checked before the single-word list so "good morning"
+#: is not mistaken for a question that happens to start with "good".
+_GREETING_PHRASES = (
+    "good morning", "good afternoon", "good evening", "good day",
+    "how are you", "kaise ho", "kya haal",
 )
 
 _SKIP_WORDS = frozenset(
@@ -128,6 +192,12 @@ def wants_human(text: str) -> bool:
     return bool(_HUMAN_RE.search(cleaned))
 
 
+def wants_reschedule(text: str) -> bool:
+    """True when the user wants to move a call they have already booked."""
+    cleaned = normalize(text)
+    return any(phrase in cleaned for phrase in _RESCHEDULE_PHRASES)
+
+
 def wants_menu(text: str) -> bool:
     cleaned = normalize(text)
     if any(phrase in cleaned for phrase in _MENU_PHRASES):
@@ -137,9 +207,56 @@ def wants_menu(text: str) -> bool:
     return len(words) == 1 and words[0] in _MENU_WORDS
 
 
+#: "what do you teach", "what can i learn", "show me what you offer" - asking
+#: for the catalogue without naming it. Only trusted when no course is already
+#: selected, because "what will I learn" inside a chosen course is a question
+#: about that course, not a request for the list.
+_TEACHING_VERBS = frozenset(
+    "teach teaches taught learn learns offer offers provide provides".split()
+)
+
+
+def wants_course_list(text: str, *, course_selected: bool = False) -> bool:
+    """True when the user is asking what is on offer.
+
+    Requires a catalogue noun ("courses", "programs") AND a listing word
+    ("what", "show", "kya", "batao"), and refuses when the message names a
+    course attribute - because "how long is the course" and "what does the
+    course cost" are questions about a course, not requests for the list, and
+    must reach the model with that course's own knowledge.
+
+    `course_selected` narrows the looser verb-only forms, which would otherwise
+    hijack "what will I learn" once someone is deep in a single course.
+    """
+    words = _tokens(text)
+    if words & _COURSE_ATTRIBUTE_WORDS:
+        return False
+    if not words & _CATALOGUE_ASKS:
+        return False
+    if words & _CATALOGUE_NOUNS:
+        return True
+    return not course_selected and bool(words & _TEACHING_VERBS)
+
+
 def is_greeting(text: str) -> bool:
-    words = normalize(text).split()
-    return bool(words) and len(words) <= 2 and words[0] in _GREETINGS
+    """True for an opener like "hi" or "hello there".
+
+    Kept to short utterances on purpose. "hi, what are the fees for data
+    science" is a question that happens to start politely, and answering it
+    with the menu would be worse than answering the question.
+    """
+    cleaned = normalize(text)
+    words = cleaned.split()
+    if not words:
+        return False
+    # "good morning" / "kaise ho" - only when that is the whole message, so
+    # "good morning, what are the fees" still reaches the model as a question.
+    if any(cleaned.startswith(phrase) for phrase in _GREETING_PHRASES):
+        return len(words) <= 4
+    if words[0] not in _GREETINGS:
+        return False
+    # Allow "hi there", "hello sir" - but not a greeting with a question after it.
+    return len(words) <= 3
 
 
 def is_skip(text: str) -> bool:

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from app.bot import copy, intents
 from app.bot.context import (
     CTX_NAME_ATTEMPTS,
+    CTX_PENDING_DATE,
     CTX_PENDING_NAME,
     CTX_PENDING_TIME,
     CTX_PENDING_TIME_RAW,
+    CTX_RESCHEDULE_LEAD_ID,
     CTX_RETURN_STATE,
     CTX_SUPPORT_TOPIC,
     TurnContext,
@@ -21,6 +25,7 @@ from app.bot.handlers.common import (
     start_callback_capture,
 )
 from app.core.logging import get_logger
+from app.db.models.lead import Lead
 from app.domain.enums import ConversationState, LeadType
 from app.domain.messaging import OutboundMessage, TurnResult
 from app.services.scheduling.callback_time import CallbackSlot
@@ -96,9 +101,17 @@ async def handle_ask_callback_time(ctx: TurnContext) -> TurnResult:
     conversation = ctx.conversation
     validator = ctx.deps.callback_validator
 
-    parsed = validator.parse(ctx.text)
+    # A name volunteered here ("my name is Ayush Raj, book me for 4pm") would
+    # otherwise be lost: this state only looks for a time.
+    _capture_volunteered_name(ctx)
+
+    remembered = _remembered_date(ctx)
+    parsed = validator.parse(ctx.text, assume_date=remembered)
 
     if not parsed.ok:
+        # Keep the date they named so the retry does not silently move the day.
+        if parsed.parsed_date is not None:
+            conversation.set_ctx(CTX_PENDING_DATE, parsed.parsed_date.isoformat())
         suggestions = [slot.display() for slot in parsed.suggestions]
         result.add(
             OutboundMessage(
@@ -110,6 +123,8 @@ async def handle_ask_callback_time(ctx: TurnContext) -> TurnResult:
             )
         )
         return result
+
+    conversation.clear_ctx(CTX_PENDING_DATE)
 
     slot: CallbackSlot = parsed.slot  # type: ignore[assignment]
     conversation.update_ctx(
@@ -182,6 +197,12 @@ async def _create_lead(ctx: TurnContext, *, remarks: str | None) -> TurnResult:
         course = ctx.deps.knowledge_base.get_course(conversation.current_course)
         course_name = course.name if course else conversation.current_course
 
+    rescheduling = conversation.get_ctx(CTX_RESCHEDULE_LEAD_ID)
+    if rescheduling and preferred_time is not None:
+        moved = await _apply_reschedule(ctx, int(rescheduling), preferred_time)
+        if moved is not None:
+            return moved
+
     lead = await ctx.deps.lead_service.create_lead(
         user_id=user.id,
         conversation_id=conversation.id,
@@ -240,3 +261,175 @@ def _resume_state(ctx: TurnContext) -> ConversationState:
 
 def _format_phone(phone: str) -> str:
     return phone if phone.startswith("+") else f"+{phone}"
+
+
+def _remembered_date(ctx: TurnContext) -> date | None:
+    """The date from a previous, rejected attempt in this same booking."""
+    raw = ctx.conversation.get_ctx(CTX_PENDING_DATE)
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError:
+        return None
+
+
+def _capture_volunteered_name(ctx: TurnContext) -> None:
+    """Pick up a name offered while we were asking for a time.
+
+    People answer both questions at once - "my name is Ayush Raj and schedule
+    the call for 10 august at 4:30" - and this state only looks for a time, so
+    the name was dropped and the lead went out under whatever we had before.
+
+    Only acted on when the message actually announces a name, so an ordinary
+    time reply is never mistaken for one.
+    """
+    text = ctx.text.strip()
+    lowered = text.lower()
+    marker = next(
+        (p for p in ("my name is", "my name's", "name is", "this is", "i am", "i'm")
+         if p in lowered),
+        None,
+    )
+    if marker is None:
+        return
+
+    # Everything from the marker up to the next clause boundary is the name.
+    tail = text[lowered.index(marker) + len(marker):]
+    candidate = re.split(r"\b(?:and|,|;|\.|book|schedule|call|for|at)\b", tail, maxsplit=1)[0]
+    name = clean_name(candidate)
+    if not name:
+        return
+
+    ctx.user.name = name
+    ctx.conversation.set_ctx(CTX_PENDING_NAME, name)
+    # NB: "name" is a reserved LogRecord attribute - passing it in `extra`
+    # raises KeyError and kills the turn.
+    logger.info("Name captured from a time reply", extra={"captured_name": name})
+
+
+# --------------------------------------------------------------------------- #
+# Rescheduling
+# --------------------------------------------------------------------------- #
+async def start_reschedule(ctx: TurnContext) -> TurnResult:
+    """Move an existing booking, or fall back to making one.
+
+    Looked up by phone number rather than by conversation, because the original
+    booking almost always happened in an earlier, now-closed conversation.
+    """
+    result = TurnResult()
+    lead = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+
+    if lead is None:
+        # Nothing to move - treat it as a normal request for a call.
+        result.add(OutboundMessage(text=copy.RESCHEDULE_NOTHING_BOOKED))
+        capture = start_callback_capture(
+            ctx, lead_type=ctx.conversation.lead_type or LeadType.PRE_SALES
+        )
+        result.replies.extend(capture.replies)
+        return result
+
+    return _ask_for_the_new_time(ctx, lead)
+
+
+async def handle_confirm_reschedule(ctx: TurnContext) -> TurnResult:
+    """"Move the existing call, or book another?"."""
+    reply_id = ctx.inbound.reply_id
+    conversation = ctx.conversation
+
+    if reply_id == copy.RESCHEDULE_NEW or intents.is_negative(ctx.text):
+        conversation.clear_ctx(CTX_RESCHEDULE_LEAD_ID)
+        conversation.current_state = ConversationState.ASK_CALLBACK_TIME
+        name = str(conversation.get_ctx(CTX_PENDING_NAME) or ctx.user.display_name)
+        result = TurnResult()
+        result.add(OutboundMessage(text=ask_time_text(ctx, name)))
+        return result
+
+    if reply_id == copy.RESCHEDULE_MOVE or intents.is_affirmative(ctx.text):
+        lead = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+        if lead is not None:
+            return _ask_for_the_new_time(ctx, lead)
+
+    # Anything else: re-ask rather than guess which they meant.
+    result = TurnResult()
+    lead = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+    when = describe_slot(lead, ctx.deps.settings.tz) if lead else "your call"
+    result.add(copy.reschedule_choice(when))
+    return result
+
+
+def _ask_for_the_new_time(ctx: TurnContext, lead: Lead) -> TurnResult:
+    conversation = ctx.conversation
+    conversation.set_ctx(CTX_RESCHEDULE_LEAD_ID, lead.id)
+    conversation.clear_ctx(CTX_PENDING_DATE)
+    conversation.lead_type = lead.type
+    conversation.current_state = ConversationState.ASK_CALLBACK_TIME
+
+    result = TurnResult()
+    result.add(
+        OutboundMessage(
+            text=copy.RESCHEDULE_PROMPT.format(
+                when=describe_slot(lead, ctx.deps.settings.tz),
+                hours=ctx.deps.callback_validator.business_hours_text(),
+            )
+        )
+    )
+    return result
+
+
+async def _apply_reschedule(
+    ctx: TurnContext, lead_id: int, preferred_time: datetime
+) -> TurnResult | None:
+    """Move the existing booking. Returns None if it can no longer be found.
+
+    Falling back to creating a new lead is deliberate: if the original was
+    deleted or already worked, losing the request entirely would be worse than
+    an extra row.
+    """
+    conversation = ctx.conversation
+    lead = await ctx.deps.lead_repository.get_by_id(lead_id)
+    if lead is None or lead.phone != ctx.user.phone:
+        logger.warning("Reschedule target vanished", extra={"lead_id": lead_id})
+        conversation.clear_ctx(CTX_RESCHEDULE_LEAD_ID)
+        return None
+
+    await ctx.deps.lead_repository.reschedule(
+        lead,
+        preferred_time=preferred_time,
+        preferred_time_raw=conversation.get_ctx(CTX_PENDING_TIME_RAW),
+    )
+    conversation.clear_ctx(CTX_RESCHEDULE_LEAD_ID)
+    conversation.current_state = ConversationState.END
+
+    logger.info(
+        "Callback rescheduled",
+        extra={"lead_id": lead.id, "new_time": preferred_time.isoformat()},
+    )
+
+    result = TurnResult()
+    result.add(
+        OutboundMessage(
+            text=copy.RESCHEDULE_DONE.format(
+                when=CallbackSlot(at=preferred_time, raw="").display()
+            )
+        )
+    )
+    result.lead_id = lead.id
+    result.close_conversation = True
+    return result
+
+
+def describe_slot(lead: Lead, tz: ZoneInfo) -> str:
+    """Human-readable booked time, in the business timezone.
+
+    The column stores the absolute instant, so a value read back from the
+    database arrives in UTC. Formatting it directly told a user their 4 PM call
+    was at 10:30 AM - correct to the second, and useless.
+
+    `preferred_time` is nullable on the model, and although
+    `find_upcoming_callback` only returns rows that have one, a lead reached by
+    id might not - so this degrades to a phrase rather than raising mid-turn.
+    """
+    if lead.preferred_time is None:
+        return "your upcoming call"
+    return CallbackSlot(at=lead.preferred_time.astimezone(tz), raw="").display()
