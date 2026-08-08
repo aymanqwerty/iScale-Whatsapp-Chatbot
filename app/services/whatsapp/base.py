@@ -19,8 +19,12 @@ class MessagingClient(Protocol):
         """Deliver one message. Returns the provider message id when available."""
         ...
 
-    async def mark_read(self, wa_message_id: str) -> None:
-        """Show the blue ticks. Best-effort; failures are swallowed."""
+    async def mark_read(self, wa_message_id: str, *, typing: bool = False) -> None:
+        """Show the blue ticks, and optionally the "typing…" bubble.
+
+        Best-effort; failures are swallowed. Both are cosmetic, and neither is
+        worth failing a reply over.
+        """
         ...
 
     async def close(self) -> None:
