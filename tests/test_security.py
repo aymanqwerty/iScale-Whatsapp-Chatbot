@@ -198,3 +198,55 @@ def test_alembic_env_escapes_the_url() -> None:
     )
 
     assert 'database_url.replace("%", "%%")' in source
+
+
+# --------------------------------------------------------------------------- #
+# A broken Google key must not take the bot down
+# --------------------------------------------------------------------------- #
+def test_malformed_service_account_json_does_not_raise() -> None:
+    """Regression: this crashed the container in a boot loop on Render.
+
+    `container.build()` asks the sink whether it is usable, which parses the
+    key. An unparseable key therefore killed the whole process - taking
+    WhatsApp offline over a spreadsheet mirror. Leads live in PostgreSQL; the
+    sheet is a convenience and must never be able to stop the bot.
+    """
+    from app.core.config import Settings
+
+    settings = Settings(
+        _env_file=None,
+        google_sheets_enabled=True,
+        google_service_account_json="{not valid json at all",
+    )
+
+    assert settings.google_credentials_info() is None
+
+
+def test_app_still_starts_with_a_broken_google_key(tmp_path: Path) -> None:
+    """The whole container must come up, not just the parser return None."""
+    from sqlalchemy import create_engine
+
+    from app.core.config import Settings
+    from app.db.base import Base
+    from app.main import create_app
+
+    db_file = tmp_path / "boot.db"
+    engine = create_engine(f"sqlite:///{db_file}")
+    Base.metadata.create_all(engine)
+    engine.dispose()
+
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url=f"sqlite+aiosqlite:///{db_file}",
+        knowledge_dir=Path(__file__).resolve().parents[1] / "knowledge",
+        whatsapp_enabled=False,
+        google_sheets_enabled=True,
+        google_service_account_json="}}} broken {{{",
+        log_level="WARNING",
+    )
+
+    with TestClient(create_app(settings)) as client:
+        assert client.get("/api/v1/health").status_code == 200
+        ready = client.get("/api/v1/health/ready").json()
+        assert ready["checks"]["lead_sink"]["enabled"] is False

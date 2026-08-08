@@ -194,17 +194,49 @@ class Settings(BaseSettings):
         return self.environment == "production"
 
     def google_credentials_info(self) -> dict[str, Any] | None:
-        """Service-account credentials as a dict, from inline JSON or a file."""
+        """Service-account credentials as a dict, from inline JSON or a file.
+
+        Returns None rather than raising when the key is unreadable. This is
+        called during startup to decide whether the Sheets sink is usable, so a
+        malformed key used to crash the whole process in a boot loop - taking
+        WhatsApp down over a spreadsheet mirror. Leads live in PostgreSQL; the
+        sheet is a convenience, and it must never be able to stop the bot.
+
+        Pasting the key into an environment variable is where this bites: the
+        `private_key` field is full of `\\n` escapes and is easily mangled.
+        """
+        import logging
+
         if self.google_service_account_json is not None:
             raw = self.google_service_account_json.get_secret_value().strip()
             if raw:
-                return json.loads(raw)
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    logging.getLogger(__name__).error(
+                        "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON (%s). "
+                        "Sheets sync is disabled; leads are still saved to "
+                        "PostgreSQL and can be pushed later with "
+                        "POST /api/v1/leads/sync-pending.",
+                        exc,
+                    )
+                    return None
         if self.google_service_account_file:
             path = Path(self.google_service_account_file).expanduser()
             if not path.is_absolute():
                 path = (BASE_DIR / path).resolve()
             if path.is_file():
-                return json.loads(path.read_text(encoding="utf-8"))
+                try:
+                    return json.loads(path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError) as exc:
+                    logging.getLogger(__name__).error(
+                        "Could not read the service-account file at %s (%s). "
+                        "Sheets sync is disabled; leads are still saved to "
+                        "PostgreSQL.",
+                        path,
+                        exc,
+                    )
+                    return None
         return None
 
 
