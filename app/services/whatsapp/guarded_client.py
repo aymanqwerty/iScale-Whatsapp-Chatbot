@@ -39,10 +39,10 @@ class GuardedMessagingClient:
             return None
         return await self._inner.send(to, message)
 
-    async def mark_read(self, wa_message_id: str) -> None:
-        # Read receipts are only ever sent for messages we chose to process,
-        # and those already passed the inbound filter.
-        await self._inner.mark_read(wa_message_id)
+    async def mark_read(self, wa_message_id: str, *, typing: bool = False) -> None:
+        # Read receipts and the typing bubble are only ever sent for messages we
+        # chose to process, and those already passed the inbound filter.
+        await self._inner.mark_read(wa_message_id, typing=typing)
 
     async def close(self) -> None:
         await self._inner.close()

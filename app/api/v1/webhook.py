@@ -157,10 +157,20 @@ def _mask(phone: str) -> str:
 async def _process(
     service: ConversationService, container: Container, inbound: InboundMessage
 ) -> None:
-    """Background worker for one message, with its own correlation id."""
+    """Background worker for one message, with its own correlation id.
+
+    The read receipt goes out first, carrying the typing indicator with it, so
+    the user sees "typing…" while retrieval and the model call happen. Meta
+    clears the bubble when the reply lands or after ~25 seconds, so there is
+    nothing to turn off - and a failure mid-turn cannot leave it stuck on.
+    """
     token = correlation_id_var.set(uuid.uuid4().hex[:12])
     try:
-        await container.messaging.mark_read(inbound.wa_message_id)
+        # Only for messages that will actually produce a reply. Showing
+        # "typing…" for a message the bot then ignores would be a lie.
+        await container.messaging.mark_read(
+            inbound.wa_message_id, typing=inbound.is_actionable
+        )
         await service.process_inbound(inbound)
     finally:
         correlation_id_var.reset(token)

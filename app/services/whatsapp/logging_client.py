@@ -30,7 +30,7 @@ class LoggingMessagingClient:
         )
         return f"local-{uuid.uuid4().hex[:12]}"
 
-    async def mark_read(self, wa_message_id: str) -> None:
+    async def mark_read(self, wa_message_id: str, *, typing: bool = False) -> None:
         return None
 
     async def close(self) -> None:

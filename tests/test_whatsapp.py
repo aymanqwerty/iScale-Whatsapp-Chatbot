@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -383,3 +384,55 @@ def test_menus_have_no_row_descriptions(knowledge_base: KnowledgeBase) -> None:
         for row in menu.list_rows:
             assert row.title
             assert row.description == "", f"{row.title!r} still carries a description"
+
+
+# --------------------------------------------------------------------------- #
+# Typing indicator
+# --------------------------------------------------------------------------- #
+def test_read_receipt_alone_carries_no_typing_indicator(
+    client: WhatsAppClient,
+) -> None:
+    """The field must be absent, not present-and-false."""
+    sent: list[dict[str, object]] = []
+
+    async def capture(body: dict[str, object]) -> object:
+        sent.append(body)
+        return None
+
+    client._post = capture  # type: ignore[assignment]
+    asyncio.run(client.mark_read("wamid.abc"))
+
+    assert sent[0] == {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": "wamid.abc",
+    }
+
+
+def test_typing_indicator_rides_along_with_the_read_receipt(
+    client: WhatsAppClient,
+) -> None:
+    """One API call, not two - Meta accepts both in the same request."""
+    sent: list[dict[str, object]] = []
+
+    async def capture(body: dict[str, object]) -> object:
+        sent.append(body)
+        return None
+
+    client._post = capture  # type: ignore[assignment]
+    asyncio.run(client.mark_read("wamid.abc", typing=True))
+
+    assert len(sent) == 1, "the bubble must not cost an extra round trip"
+    assert sent[0]["typing_indicator"] == {"type": "text"}
+    assert sent[0]["status"] == "read"
+
+
+def test_a_failed_typing_indicator_is_swallowed(client: WhatsAppClient) -> None:
+    """Cosmetic. It must never take down a reply."""
+
+    async def explode(body: dict[str, object]) -> object:
+        raise RuntimeError("Meta is unhappy")
+
+    client._post = explode  # type: ignore[assignment]
+
+    asyncio.run(client.mark_read("wamid.abc", typing=True))  # must not raise

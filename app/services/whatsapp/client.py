@@ -72,17 +72,25 @@ class WhatsAppClient:
         )
         return message_id
 
-    async def mark_read(self, wa_message_id: str) -> None:
-        """Best effort - a failed read receipt must never break a reply."""
+    async def mark_read(self, wa_message_id: str, *, typing: bool = False) -> None:
+        """Best effort - a failed read receipt must never break a reply.
+
+        `typing` adds the "typing…" bubble to the same call. Meta clears it when
+        the reply arrives, or after about 25 seconds, whichever comes first - so
+        there is nothing to switch off afterwards, and a crash mid-turn cannot
+        leave the bubble stuck on.
+        """
+        payload: dict[str, Any] = {
+            "messaging_product": "whatsapp",
+            "status": "read",
+            "message_id": wa_message_id,
+        }
+        if typing:
+            payload["typing_indicator"] = {"type": "text"}
+
         try:
             self._require_config()
-            await self._post(
-                {
-                    "messaging_product": "whatsapp",
-                    "status": "read",
-                    "message_id": wa_message_id,
-                }
-            )
+            await self._post(payload)
         except Exception as exc:
             logger.debug("Could not mark message as read", extra={"error": str(exc)})
 

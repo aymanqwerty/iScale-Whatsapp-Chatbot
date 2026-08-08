@@ -354,3 +354,44 @@ def test_unsupported_methods_are_still_refused(client: TestClient) -> None:
     """Widening to HEAD must not open the endpoint to anything else."""
     assert client.post("/api/v1/health").status_code == 405
     assert client.delete("/api/v1/health").status_code == 405
+
+
+def test_typing_is_requested_only_for_messages_that_get_a_reply(
+    client: TestClient,
+) -> None:
+    """Showing "typing…" for a message the bot then ignores would be a lie."""
+    from app.domain.enums import MessageKind
+    from app.domain.messaging import InboundMessage
+
+    seen: list[tuple[str, bool]] = []
+
+    class Recorder:
+        async def send(self, to: str, message: object) -> None:
+            return None
+
+        async def mark_read(self, wa_message_id: str, *, typing: bool = False) -> None:
+            seen.append((wa_message_id, typing))
+
+        async def close(self) -> None:
+            return None
+
+    container = client.app.state.container  # type: ignore[attr-defined]
+    container.messaging = Recorder()
+
+    from app.api.v1.webhook import _process
+
+    service = container.conversation_service()
+    actionable = InboundMessage(
+        wa_message_id="wamid.text", from_phone=PHONE,
+        kind=MessageKind.TEXT, text="hi",
+    )
+    sticker = InboundMessage(
+        wa_message_id="wamid.sticker", from_phone=PHONE,
+        kind=MessageKind.UNSUPPORTED,
+    )
+
+    asyncio.run(_process(service, container, actionable))
+    asyncio.run(_process(service, container, sticker))
+
+    assert ("wamid.text", True) in seen
+    assert ("wamid.sticker", False) in seen
