@@ -257,3 +257,32 @@ def test_app_still_starts_with_a_broken_google_key(tmp_path: Path) -> None:
         assert client.get("/api/v1/health").status_code == 200
         ready = client.get("/api/v1/health/ready").json()
         assert ready["checks"]["lead_sink"]["enabled"] is False
+
+
+# --------------------------------------------------------------------------- #
+# The simulator must not exist in production
+# --------------------------------------------------------------------------- #
+def test_simulator_is_gone_in_production(unconfigured_prod_client: TestClient) -> None:
+    """Every /simulate route is a development aid and a production liability.
+
+    `POST /simulate` lets a caller act as ANY phone number, and
+    `GET /simulate/allowlist` discloses which numbers the bot will talk to.
+    The guard used to sit inside the POST handler alone, leaving the
+    diagnostics readable by anyone who found the URL - confirmed live on the
+    deployed service before this was fixed.
+    """
+    client = unconfigured_prod_client
+
+    assert client.get("/api/v1/simulate/allowlist").status_code == 404
+    assert client.get("/api/v1/simulate/outbox").status_code == 404
+    assert (
+        client.post(
+            "/api/v1/simulate", json={"phone": "919876543210", "text": "hi"}
+        ).status_code
+        == 404
+    )
+
+
+def test_simulator_still_works_in_development(api_key_client: TestClient) -> None:
+    """It must remain usable where it earns its keep."""
+    assert api_key_client.get("/api/v1/simulate/allowlist").status_code == 200
