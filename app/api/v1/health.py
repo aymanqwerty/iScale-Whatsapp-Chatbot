@@ -15,7 +15,11 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["health"])
 
 
-@router.api_route("/health", methods=["GET", "HEAD"], summary="Liveness probe")
+@router.get("/health", summary="Liveness probe")
+# HEAD is registered separately and hidden from the schema: one `api_route`
+# with both methods makes FastAPI emit two operations with the same id, which
+# it warns about and which pollutes the OpenAPI document.
+@router.head("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     """Cheap check - the process is up. Never touches a dependency.
 
@@ -28,9 +32,8 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.api_route(
-    "/health/ready", methods=["GET", "HEAD"], summary="Readiness probe"
-)
+@router.get("/health/ready", summary="Readiness probe")
+@router.head("/health/ready", include_in_schema=False)
 async def readiness(container: ContainerDep, response: Response) -> dict[str, Any]:
     """Reports each dependency. 503 when the database is unreachable.
 
