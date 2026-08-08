@@ -150,10 +150,17 @@ def test_pooler_engine_disables_the_statement_cache() -> None:
         _env_file=None,
         database_url="postgresql+asyncpg://u:p@aws-0.pooler.supabase.com:6543/postgres",
     ))
-    assert pooled["connect_args"] == {
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-    }
+    args = pooled["connect_args"]
+    assert args["statement_cache_size"] == 0
+    assert args["prepared_statement_cache_size"] == 0
+
+    # The two cache settings alone are NOT enough. SQLAlchemy names prepared
+    # statements from a per-connection counter (`__asyncpg_stmt_5__`), and
+    # behind a transaction pooler two connections can land on the same backend
+    # with the same counter - so the name collides. Observed failing against
+    # Supabase intermittently with only the caches disabled.
+    namer = args["prepared_statement_name_func"]
+    assert namer() != namer(), "statement names must be unique per statement"
 
     direct = engine_kwargs(Settings(
         _env_file=None,
