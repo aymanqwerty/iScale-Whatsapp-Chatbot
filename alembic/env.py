@@ -28,7 +28,12 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Alembic keeps its config in a `configparser`, where `%` starts an
+# interpolation token. A percent-encoded character in the URL - which any
+# password containing `@`, `/` or `:` must have, e.g. `p@ss` -> `p%40ss` - then
+# raises "invalid interpolation syntax" before a single migration runs.
+# Doubling the sign escapes it; configparser stores the original value.
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

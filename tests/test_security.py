@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -159,3 +160,41 @@ def test_pooler_engine_disables_the_statement_cache() -> None:
         database_url="postgresql+asyncpg://u:p@db.example.supabase.co:5432/postgres",
     ))
     assert "connect_args" not in direct, "a direct connection should keep the cache"
+
+
+# --------------------------------------------------------------------------- #
+# Alembic config escaping
+# --------------------------------------------------------------------------- #
+def test_percent_encoded_url_survives_alembic_config() -> None:
+    """Regression: a `%` in the URL crashed migrations before they ran.
+
+    Alembic stores config in a `configparser`, where `%` begins an
+    interpolation token. Any password containing `@`, `/` or `:` must be
+    percent-encoded to be valid in a URL - so `p@ss` becomes `p%40ss` - and
+    that raised "invalid interpolation syntax" on boot, after the database
+    connected but before a single migration applied.
+    """
+    from configparser import ConfigParser
+
+    url = (
+        "postgresql+asyncpg://user:iScale%4099123"
+        "@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+    )
+    parser = ConfigParser()
+    parser.add_section("alembic")
+
+    with pytest.raises(ValueError, match="interpolation"):
+        parser.set("alembic", "sqlalchemy.url", url)
+
+    # What alembic/env.py actually does, and it must round-trip unchanged.
+    parser.set("alembic", "sqlalchemy.url", url.replace("%", "%%"))
+    assert parser.get("alembic", "sqlalchemy.url") == url
+
+
+def test_alembic_env_escapes_the_url() -> None:
+    """The escaping must be in env.py, not only in this test's imagination."""
+    source = (Path(__file__).resolve().parents[1] / "alembic" / "env.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'database_url.replace("%", "%%")' in source
