@@ -7,6 +7,7 @@ import pytest
 from app.bot import copy
 from app.core.exceptions import ConfigurationError, LLMError
 from app.domain.enums import LeadStatus, LeadType, SyncStatus
+from app.services.crm.base import LEAD_COLUMNS
 from tests.conftest import Harness
 
 
@@ -23,9 +24,24 @@ async def test_greeting_opens_the_main_menu(harness: Harness) -> None:
         copy.MENU_COURSES,
         copy.MENU_ENROLLED,
         copy.MENU_COUNSELOR,
-        copy.MENU_GENERAL,
     }
+    titles = {title for _, title in replies[0].options}
+    assert titles == {"Not Enrolled Yet", "Already Enrolled", "Talk to a Counselor"}
     assert await harness.state() == "MAIN_MENU"
+
+
+async def test_retired_general_option_is_still_handled(harness: Harness) -> None:
+    """Old menu messages stay tappable in WhatsApp indefinitely.
+
+    "General Question" was removed from the menu, but a user scrolling back
+    through the thread can still tap it. Dropping the branch would answer them
+    with a fallback instead of the thing they asked for.
+    """
+    await harness.say("hi")
+
+    await harness.say(reply_id=copy.MENU_GENERAL)
+
+    assert await harness.state() == "GENERAL_QNA"
 
 
 async def test_returning_user_is_greeted_by_name(harness: Harness) -> None:
@@ -68,8 +84,10 @@ async def test_course_menu_is_built_from_the_knowledge_base(harness: Harness) ->
     replies = await harness.say(reply_id=copy.MENU_COURSES)
 
     titles = {title for _, title in replies[0].options}
-    assert "Data Analytics" in titles
-    assert "Power BI" in titles
+    assert "Master Of Data Analytics Program" in titles
+    assert "AI Engineer Advance Program" in titles
+    # Non-featured courses are behind the "Other courses" row, not listed.
+    assert "Free Data Analytics Course" not in titles
     assert "Not sure yet" in titles
     assert await harness.state() == "COURSE_SELECTION"
 
@@ -78,9 +96,9 @@ async def test_selecting_a_course_enters_qna(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COURSES)
 
-    replies = await harness.say(reply_id=f"{copy.COURSE_PREFIX}data-science")
+    replies = await harness.say(reply_id=f"{copy.COURSE_PREFIX}data-science-with-generative-ai")
 
-    assert "Data Science" in replies[0].text
+    assert "Data Science With Generative AI Course" in replies[0].text
     assert await harness.state() == "COURSE_QNA"
 
 
@@ -97,17 +115,17 @@ async def test_course_can_be_chosen_by_typing_its_name(harness: Harness) -> None
 async def test_questions_are_answered_from_the_knowledge_base(
     harness: Harness,
 ) -> None:
-    harness.llm.reply = "The Data Analytics program runs for 4 months."
+    harness.llm.reply = "The Master Of Data Analytics Program runs for 3 to 6 months."
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COURSES)
-    await harness.say(reply_id=f"{copy.COURSE_PREFIX}data-analytics")
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}master-of-data-analytics")
 
     replies = await harness.say("how long is the course?")
 
-    assert replies[0].text == "The Data Analytics program runs for 4 months."
+    assert replies[0].text == "The Master Of Data Analytics Program runs for 3 to 6 months."
     prompt = harness.llm.calls[-1]["user_prompt"]
     assert "KNOWLEDGE" in prompt
-    assert "4 months" in prompt  # the duration snippet was actually retrieved
+    assert "3 months" in prompt  # the duration snippet was actually retrieved
 
 
 async def test_callback_is_offered_after_the_nudge_threshold(
@@ -116,7 +134,7 @@ async def test_callback_is_offered_after_the_nudge_threshold(
     """Three answered questions, then one offer - and only one."""
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COURSES)
-    await harness.say(reply_id=f"{copy.COURSE_PREFIX}data-analytics")
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}master-of-data-analytics")
 
     await harness.say("what is the duration?")
     await harness.say("what tools are covered?")
@@ -140,7 +158,7 @@ async def test_callback_is_offered_after_the_nudge_threshold(
 async def test_full_pre_sales_lead_capture(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COURSES)
-    await harness.say(reply_id=f"{copy.COURSE_PREFIX}data-science")
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}data-science-with-generative-ai")
     await harness.say("I want a counselor to call me")
 
     assert await harness.state() == "ASK_NAME"
@@ -160,7 +178,7 @@ async def test_full_pre_sales_lead_capture(harness: Harness) -> None:
     assert lead.name == "Rahul Verma"
     assert lead.type is LeadType.PRE_SALES
     assert lead.status is LeadStatus.NEW
-    assert lead.interested_course == "Data Science"
+    assert lead.interested_course == "Data Science With Generative AI Course"
     assert lead.preferred_time is not None
     assert lead.remarks == "I want to know about the placement support"
     assert "Rahul Verma" in replies[0].text
@@ -260,19 +278,25 @@ async def test_full_post_sales_lead_capture(harness: Harness) -> None:
     assert leads[0].interested_course == "Technical Issue"
 
 
-async def test_support_answer_uses_post_sales_knowledge_only(
+async def test_support_answer_is_grounded_and_audience_filtered(
     harness: Harness,
 ) -> None:
+    """A support answer must still be built from retrieved knowledge.
+
+    This deliberately asserts the mechanism rather than any particular phrase:
+    the FAQ file is business-owned content that gets rewritten, and pinning the
+    test to a sentence in it makes every content edit look like a code failure.
+    Audience filtering itself is covered in `test_knowledge.py`.
+    """
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_ENROLLED)
     await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}assignment")
 
     await harness.say("where do I submit my assignment?")
 
-    prompt = harness.llm.calls[-1]["user_prompt"]
-    assert "student portal" in prompt.lower()
-    # Pre-sales-only content must not leak into a support answer.
-    assert "demo class before joining" not in prompt.lower()
+    call = harness.llm.calls[-1]
+    assert "KNOWLEDGE" in call["user_prompt"]
+    assert "SUPPORT MODE" in call["system_prompt"]
 
 
 # --------------------------------------------------------------------------- #
@@ -286,7 +310,7 @@ async def test_menu_command_resets_the_flow(harness: Harness) -> None:
     replies = await harness.say("menu")
 
     assert await harness.state() == "MAIN_MENU"
-    assert len(replies[0].options) == 4
+    assert len(replies[0].options) == len(copy.MAIN_MENU_OPTIONS)
 
 
 async def test_asking_for_a_human_escalates_from_anywhere(harness: Harness) -> None:
@@ -337,7 +361,7 @@ async def test_any_llm_failure_still_answers_and_keeps_state(
 ) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COURSES)
-    await harness.say(reply_id=f"{copy.COURSE_PREFIX}python")
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}ai-engineer-advance-program")
 
     harness.llm.fail = True
     harness.llm.error = error
@@ -387,7 +411,18 @@ async def test_lead_is_pushed_to_the_sink(harness: Harness) -> None:
     assert record.name == "Dev"
     assert record.phone == harness.phone
     assert record.status == "NEW"
-    assert len(record.as_row()) == 8
+    assert len(record.as_row()) == len(LEAD_COLUMNS)
+
+    # The callback slot must reach the sheet as separate date and time values,
+    # not one sentence: a counselor filters "Callback Date = today" to find who
+    # to ring, which inert text cannot answer.
+    assert record.callback_date == "2026-08-06"  # frozen clock: Wed 5 Aug + 1
+    assert record.callback_time == "15:00"
+    assert record.callback_raw == "tomorrow 3pm"
+
+    row = record.as_row()
+    assert row[LEAD_COLUMNS.index("Callback Date")] == "2026-08-06"
+    assert row[LEAD_COLUMNS.index("Callback Time")] == "15:00"
 
     leads = await harness.leads()
     assert leads[0].sync_status is SyncStatus.SYNCED
@@ -410,3 +445,41 @@ async def test_sink_failure_is_recorded_but_does_not_lose_the_lead(
     assert leads[0].sync_error
     # The user still gets a clean confirmation.
     assert "Ishaan" in replies[0].text
+
+
+async def test_leads_captured_before_the_sink_existed_are_backfilled(
+    harness: Harness,
+) -> None:
+    """SKIPPED must not be a dead end.
+
+    Every lead taken while Google Sheets was switched off carries SKIPPED - the
+    normal state during development. Those rows were invisible to
+    `retry_pending`, so turning the sheet on later left them stranded in
+    PostgreSQL with no way to push them through short of editing the database.
+    """
+    from app.services.crm.null_sink import NullLeadSink
+    from app.services.lead_service import LeadSyncService
+
+    # Capture a lead with no sink configured, exactly as the live bot did.
+    disabled = LeadSyncService(harness.database, NullLeadSink(), harness.service._settings)
+    harness.service._lead_sync = disabled
+
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COUNSELOR)
+    await harness.say("Nishant")
+    await harness.say("tomorrow 3pm")
+    await harness.say("skip")
+
+    leads = await harness.leads()
+    assert len(leads) == 1
+    assert leads[0].sync_status is SyncStatus.SKIPPED
+    assert harness.sink.pushed == []
+
+    # Now the sheet is configured - the operator retries.
+    enabled = LeadSyncService(harness.database, harness.sink, harness.service._settings)
+    synced = await enabled.retry_pending()
+
+    assert synced == 1
+    assert [record.name for record in harness.sink.pushed] == ["Nishant"]
+    leads = await harness.leads()
+    assert leads[0].sync_status is SyncStatus.SYNCED

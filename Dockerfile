@@ -50,10 +50,14 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Never run the application as root.
 USER appuser
 
+ENV PORT=8000
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT}/api/v1/health" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# No exec-form CMD here: Render, Railway and Heroku all inject their own $PORT
+# and route only to that. A hardcoded 8000 means the platform's health check
+# never connects and the deploy is marked failed with the app running fine.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

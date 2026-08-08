@@ -55,5 +55,58 @@
       "keywords": ["support", "help", "contact"],
       "answer": "You can raise your concern here or request a callback from our support team."
     }
+  ],
+
+  "_comment_enrolled": "audience: post_sales entries are shown only to enrolled students in the support flow, and are hidden from prospects. Keep them grounded - a wrong answer here reaches someone who has already paid.",
+
+  "enrolled": [
+    {
+      "question": "Where do I access my classes and recordings?",
+      "keywords": ["lms", "portal", "login", "access", "recording", "recorded", "missed class", "platform", "app"],
+      "answer": "Your course is on our LMS, which you can open on the web or through the Android app using the login you received when you enrolled. Live sessions are recorded and added there, so a missed class can be caught up on.",
+      "audience": "post_sales"
+    },
+    {
+      "question": "I cannot log in to my account.",
+      "keywords": ["login", "cannot login", "password", "locked", "access issue", "sign in"],
+      "answer": "Sorry about that. Please try resetting your password from the login screen first. If that does not work, our support team can check the account for you - shall I arrange a callback?",
+      "audience": "post_sales"
+    },
+    {
+      "question": "When are the live doubt sessions?",
+      "keywords": ["doubt", "live session", "timing", "schedule", "when", "class timing"],
+      "answer": "Live doubt sessions run four days a week. The exact timings for your batch are posted on the LMS, and the support team can confirm them for you.",
+      "audience": "post_sales"
+    },
+    {
+      "question": "How do I submit my assignment or project?",
+      "keywords": ["assignment", "submit", "submission", "project", "upload", "deadline"],
+      "answer": "Assignments and projects are submitted through the LMS, in the module they belong to. If a submission fails or you need a deadline reviewed, our support team can help - would you like a callback?",
+      "audience": "post_sales"
+    },
+    {
+      "question": "When do I get my certificate?",
+      "keywords": ["certificate", "iso", "completion", "when certificate"],
+      "answer": "The ISO-certified certificate is issued once you complete the course requirements, including the assessments and projects for your program. Support can check exactly what is pending on your account.",
+      "audience": "post_sales"
+    },
+    {
+      "question": "How do I get placement and job portal access?",
+      "keywords": ["job portal", "placement", "resume", "mock interview", "referral", "career support"],
+      "answer": "Placement support includes resume and LinkedIn reviews, mock interviews and access to our job portal. Access depends on your plan and course progress, so a counselor can confirm what is unlocked for you.",
+      "audience": "post_sales"
+    },
+    {
+      "question": "I have a question about my payment or EMI.",
+      "keywords": ["payment", "emi", "installment", "invoice", "receipt", "billing", "due"],
+      "answer": "Payment and EMI questions are handled by our accounts team rather than here, so nothing gets misquoted. I can arrange a callback and they will go through your details with you.",
+      "audience": "post_sales"
+    },
+    {
+      "question": "Can I switch batch or extend my access?",
+      "keywords": ["switch batch", "change batch", "extend", "extension", "pause", "defer"],
+      "answer": "Batch changes and access extensions are decided case by case by the support team. Tell me what you need and I will pass it on with a callback request.",
+      "audience": "post_sales"
+    }
   ]
 }

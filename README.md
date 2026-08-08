@@ -199,17 +199,41 @@ The ones that matter most:
 
 ## The knowledge base
 
-Five JSON files in `knowledge/`. Ships with working sample data — **replace the
-contents with real iScale information before going live.** The bot can only say
-what is in here.
+JSON files in `knowledge/`. The bot can only say what is in here.
 
-| File | Shape |
+**Retrieved knowledge** — indexed and searched per question:
+
+| File | Shape | Notes |
+|---|---|---|
+| `courses.json` | `{"courses": [ … ]}` | `featured: true` puts a course in the WhatsApp menu; the rest sit behind an "Other courses" row and stay fully answerable |
+| `faqs.json` | `{"admission": [ … ], "classes": [ … ]}` **or** `{"faqs": [ … ]}` | Grouped by category or flat; both load. `audience: "post_sales"` hides an entry from prospects |
+| `policies.json` | `{"refund_policy": { … }}` **or** `{"policies": [ … ]}` | Keyed sections or a flat list; both load |
+| `company.json` | `{"company": { … }, "contact": { … }, "working_hours": { … }}` | The whole document is read, not just the `company` block |
+| `placements.json` | `{"placements": { … }}` | |
+
+**Prompt configuration** — not indexed; injected into the system prompt every turn:
+
+| File | Effect |
 |---|---|
-| `courses.json` | `{"courses": [ … ]}` |
-| `faqs.json` | `{"faqs": [ … ]}` |
-| `policies.json` | `{"policies": [ … ]}` |
-| `company.json` | `{"company": { … }}` |
-| `placements.json` | `{"placements": { … }}` |
+| `chatbot_rules.json` | `behavior` (tone, style, language) and `never_do` become a HOUSE RULES section. Lets staff tune persona and prohibitions without touching Python |
+| `prompts.json` | `reminders` are appended to the same section |
+
+These are **additive**. The grounding rules in `prompts.py` are the safety floor
+and cannot be edited away from a JSON file.
+
+**Read for cross-checks only:**
+
+| File | Effect |
+|---|---|
+| `callback_rules.json` | Its `working_hours` / `weekly_off` are compared against `BUSINESS_OPEN_TIME`, `BUSINESS_CLOSE_TIME` and `BUSINESS_CLOSED_WEEKDAYS` at startup. A mismatch is logged, not applied |
+| `conversation_flows.json` | **Currently unused.** Its strings duplicate `bot/copy.py`, which also carries WhatsApp structure JSON cannot express (button ids, list rows, character caps). Editing it changes nothing |
+
+> **Why the environment wins on business hours.** `CallbackTimeValidator` accepts
+> or rejects a requested slot from `Settings` alone. The JSON copies are what the
+> bot *says*. When they drift, nothing crashes — the bot promises a window and
+> then rejects a slot inside it. Hence the startup check.
+
+> **Restart to apply edits.** The files are read once at boot.
 
 ### Course entry
 

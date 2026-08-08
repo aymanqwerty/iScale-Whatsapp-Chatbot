@@ -46,6 +46,21 @@ _HUMAN_PHRASES = (
     "arrange a call", "schedule a call", "book a call",
 )
 
+#: A request verb followed shortly by a "call" word: "i want a call",
+#: "need a callback for data science", "can you schedule a cal on sunday".
+#:
+#: The fixed phrase list above misses these, and missing one is expensive: the
+#: turn falls through to the LLM, which answers conversationally instead of
+#: starting the booking flow - so no lead is created. `cal` is accepted because
+#: it is a common typo and the cost of missing an escalation far exceeds the
+#: cost of an occasional false positive (which only offers a callback).
+_ASK_VERB = (
+    r"(?:want|wants|wanna|need|needs|like|get|give|arrange|schedule|"
+    r"book|fix|set\s?up|request|require)"
+)
+_CALL_WORD = r"(?:call\s?back|callback|calls|call|cal)"
+_HUMAN_RE = re.compile(rf"\b{_ASK_VERB}\b[\w\s']{{0,24}}?\b{_CALL_WORD}\b")
+
 _MENU_WORDS = frozenset(
     """
     menu options home back restart reset start begin main
@@ -108,7 +123,9 @@ def is_negative(text: str) -> bool:
 
 def wants_human(text: str) -> bool:
     cleaned = normalize(text)
-    return any(phrase in cleaned for phrase in _HUMAN_PHRASES)
+    if any(phrase in cleaned for phrase in _HUMAN_PHRASES):
+        return True
+    return bool(_HUMAN_RE.search(cleaned))
 
 
 def wants_menu(text: str) -> bool:
