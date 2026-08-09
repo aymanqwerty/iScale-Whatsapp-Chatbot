@@ -92,12 +92,28 @@ Meta app → **WhatsApp → Configuration → Webhook → Edit**:
 
 **Check `ownership_type` before anything else.** Verified 9 Aug 2026:
 
-| WABA | ownership_type | Can this app send? |
-|---|---|---|
-| `831055366455730` Test | `SELF` | yes - proven |
-| `909282991701144` The iScale | `SELF` | yes |
-| `1142459674053209` Superfone | `CLIENT_OWNED` | **no** |
-| `215106001695289` MSG91 | `CLIENT_OWNED` | **no** |
+| WABA | ownership_type | Number | Can this app send? |
+|---|---|---|---|
+| **`2644045102717771` The iScale** | **`SELF`** | **+91 62322 31522** — `1257274704139594` | **yes — LIVE, proven** |
+| `831055366455730` Test | `SELF` | +1 555-622-7641 | yes - proven |
+| `909282991701144` The iScale | `SELF` | +91 78801 13112 | blocked by the WhatsApp Business app |
+| `1142459674053209` Superfone | `CLIENT_OWNED` | +91 94296 94943 | **no** |
+| `215106001695289` MSG91 | `CLIENT_OWNED` | +91 90395 15379, +91 79872 61855 | **no** |
+
+The production number is **+91 62322 31522**, `WHATSAPP_PHONE_NUMBER_ID=1257274704139594`,
+in WABA `2644045102717771`. Registered with `POST /{id}/register` (PIN `132452`)
+after SMS verification, then the app was subscribed to that WABA.
+
+> **`health_status` reads `BLOCKED` on this WABA and the bot still works.**
+> Error `141006` ("error with the payment method") blocks **business-initiated**
+> conversations only — templates and broadcasts to people who have not written
+> first. This bot is purely reactive: it replies inside the 24-hour customer
+> service window, which is free and unaffected. A real send was verified at
+> `HTTP 200` while the WABA read `BLOCKED`.
+>
+> `PHONE_NUMBER: LIMITED` is the display name still in review; it caps
+> business-initiated volume only. Add a payment method in WhatsApp Manager →
+> Billing before relying on proactive notifications. Neither blocks launch.
 
 A `CLIENT_OWNED` WABA was onboarded through a Solution Partner's embedded
 signup. The business owns it, but messaging rights stay bound to the partner's
