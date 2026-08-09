@@ -12,12 +12,14 @@ Two contracts Meta imposes, both of which shape this module:
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Header, Query, Request, Response, status
 
 from app.api.deps import ContainerDep, ConversationServiceDep
 from app.container import Container
+from app.core.config import Settings
 from app.core.logging import correlation_id_var, get_logger
 from app.domain.messaging import InboundMessage
 from app.schemas.whatsapp import WebhookPayload
@@ -103,13 +105,20 @@ async def receive(
     if not messages:
         return {"status": "ignored"}
 
+    # Drop anything WhatsApp sent long enough ago that replying would surprise
+    # the user. Meta retries undelivered webhooks for hours, so an instance that
+    # was asleep wakes to a backlog - and answering it looks, from the other
+    # end, like the bot opened a conversation on its own.
+    fresh = [m for m in messages if _is_fresh(m, settings)]
+    stale = len(messages) - len(fresh)
+
     # The inbound half of the development guard. Dropping here - before any
     # database write, LLM call or read receipt - means a message from a real
     # customer leaves no trace and gets no reaction of any kind. The number is
     # still acknowledged with a 200 so Meta does not retry it.
     allowlist = container.allowlist
-    accepted = [m for m in messages if allowlist.allows(m.from_phone)]
-    ignored = len(messages) - len(accepted)
+    accepted = [m for m in fresh if allowlist.allows(m.from_phone)]
+    ignored = len(fresh) - len(accepted)
     if ignored:
         logger.info(
             "Dropped inbound message(s) from non-allowlisted number(s)",
@@ -147,7 +156,38 @@ async def receive(
         "messages": len(accepted),
         "ignored": ignored,
         "throttled": throttled,
+        "stale": stale,
     }
+
+
+def _is_fresh(inbound: InboundMessage, settings: Settings) -> bool:
+    """Whether this message is recent enough to answer.
+
+    Judged on WhatsApp's own send time, not on when we received the webhook -
+    the whole point is to catch a delivery that arrived late.
+
+    Fails open in two cases, deliberately. A message with no timestamp is
+    treated as fresh, because dropping a real message is far worse than
+    answering an old one; and a timestamp in the future (clock skew between
+    Meta and us) is also allowed through.
+    """
+    max_age = settings.webhook_max_message_age_seconds
+    if max_age <= 0 or inbound.timestamp is None:
+        return True
+
+    age = (datetime.now(UTC) - inbound.timestamp).total_seconds()
+    if age <= max_age:
+        return True
+
+    logger.warning(
+        "Message is older than the freshness window - not answering",
+        extra={
+            "age_seconds": int(age),
+            "max_age_seconds": max_age,
+            "wa_message_id": inbound.wa_message_id,
+        },
+    )
+    return False
 
 
 def _mask(phone: str) -> str:

@@ -57,7 +57,7 @@ on boot.
 |---|---|
 | `DATABASE_URL` | The Supabase pooler URI from step 1 |
 | `GROQ_API_KEY` | console.groq.com — **generate a fresh one** |
-| `WHATSAPP_PHONE_NUMBER_ID` | Meta → WhatsApp → API Setup |
+| `WHATSAPP_PHONE_NUMBER_ID` | A number in a **`SELF`-owned** WABA — read §3.1 first |
 | `WHATSAPP_ACCESS_TOKEN` | The permanent System User token |
 | `WHATSAPP_APP_SECRET` | App Settings → Basic — **must be the same app as the token** |
 | `WHATSAPP_VERIFY_TOKEN` | Any random string; paste the same one into Meta |
@@ -87,6 +87,69 @@ Meta app → **WhatsApp → Configuration → Webhook → Edit**:
 - Click **Manage** and subscribe to the **`messages`** field — saving the URL
   alone delivers nothing. This is the single most common reason a webhook
   "verifies" and then never fires.
+
+### 3.1 The number must live in a `SELF`-owned WABA
+
+**Check `ownership_type` before anything else.** Verified 9 Aug 2026:
+
+| WABA | ownership_type | Can this app send? |
+|---|---|---|
+| `831055366455730` Test | `SELF` | yes - proven |
+| `909282991701144` The iScale | `SELF` | yes |
+| `1142459674053209` Superfone | `CLIENT_OWNED` | **no** |
+| `215106001695289` MSG91 | `CLIENT_OWNED` | **no** |
+
+A `CLIENT_OWNED` WABA was onboarded through a Solution Partner's embedded
+signup. The business owns it, but messaging rights stay bound to the partner's
+app. Subscribing succeeds and accomplishes nothing:
+
+```
+POST /{waba}/subscribed_apps   -> {"success":true}
+POST /{phone_number_id}/messages -> (#200) You do not have the necessary
+                                    permissions to send messages on behalf of
+                                    this WhatsApp Business Account
+```
+
+Both numbers in `215106001695289` fail identically, so this is a property of
+the WABA, not of a number.
+
+> **Two readings that look like success and are not.** `health_status`
+> reporting `can_send_message: AVAILABLE` describes the asset's health, not the
+> token's rights - it reads AVAILABLE on a WABA that cannot be sent from. And a
+> `subscribed_apps` POST returning `success` does not imply messaging
+> permission. The genuine tell is `GET /{waba}/subscribed_apps` returning HTTP
+> 500 (`code 1`, `subcode 99`), which only the partner-owned WABA does.
+
+Once the number is in a `SELF` WABA, subscribe the app - this is the step that
+puts the bot in front of customers, so do it *last*, after Render is deployed
+with the right `WHATSAPP_PHONE_NUMBER_ID`.
+
+Each block below is ONE line. Do not reformat across lines: pasting a
+multi-line PowerShell block often loses the newline between statements and
+yields `Unexpected token 'Invoke-RestMethod'`, which looks like a syntax bug
+but is a paste artefact. Replace `WABA_ID` with the target WABA.
+
+```powershell
+# GO LIVE  -> success : True
+$tok = (Select-String -Path .env -Pattern '^WHATSAPP_ACCESS_TOKEN=').Line -replace '^WHATSAPP_ACCESS_TOKEN=',''; Invoke-RestMethod -Method Post -Headers @{ Authorization = "Bearer $tok" } -Uri "https://graph.facebook.com/v21.0/WABA_ID/subscribed_apps"
+```
+
+```powershell
+# ROLLBACK - instant kill switch
+Invoke-RestMethod -Method Delete -Headers @{ Authorization = "Bearer $tok" } -Uri "https://graph.facebook.com/v21.0/WABA_ID/subscribed_apps"
+```
+
+**Bash / Git Bash:**
+
+```bash
+tok=$(grep '^WHATSAPP_ACCESS_TOKEN=' .env | cut -d= -f2-)
+curl -X POST   "https://graph.facebook.com/v21.0/WABA_ID/subscribed_apps" -H "Authorization: Bearer $tok"
+curl -X DELETE "https://graph.facebook.com/v21.0/WABA_ID/subscribed_apps" -H "Authorization: Bearer $tok"
+```
+
+> Do not paste the `curl` form into PowerShell: there `curl` aliases
+> `Invoke-WebRequest`, which takes different arguments, and `\` is not a line
+> continuation. It fails looking like an auth problem.
 
 ---
 
