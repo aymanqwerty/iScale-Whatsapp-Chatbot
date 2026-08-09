@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,13 +23,19 @@ class MessageRepository:
         message: str,
         wa_message_id: str | None = None,
         state: ConversationState | None = None,
+        timestamp: datetime | None = None,
     ) -> Message:
+        # `timestamp` is WhatsApp's, not ours. Storing the moment we happened to
+        # write the row makes a message Meta redelivered hours late look brand
+        # new, which is exactly the confusion that made a 9-hour-old reply
+        # impossible to explain after the fact.
         record = Message(
             conversation_id=conversation_id,
             sender=sender,
             message=message,
             wa_message_id=wa_message_id,
             state=state,
+            **({"timestamp": timestamp} if timestamp is not None else {}),
         )
         self._session.add(record)
         await self._session.flush()

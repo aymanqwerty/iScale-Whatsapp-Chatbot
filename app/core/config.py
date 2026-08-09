@@ -94,6 +94,18 @@ class Settings(BaseSettings):
     # served to anyone who can reach the port.
     api_key: SecretStr = SecretStr("")
 
+    #: Refuse to act on a message WhatsApp says was sent longer ago than this.
+    #:
+    #: Meta retries a webhook it could not deliver, with backoff, for hours. A
+    #: free instance that was asleep therefore wakes to a queue of stale
+    #: messages and answers them - which reaches the customer as the bot
+    #: messaging them out of nowhere, hours after they last said anything.
+    #: Observed: a reply sent at 09:56 to a message from the previous night.
+    #:
+    #: Generous by default. Real delivery is a second or two, so this only ever
+    #: catches genuine redeliveries. Set to 0 to disable the check.
+    webhook_max_message_age_seconds: int = 900
+
     rate_limit_enabled: bool = True
     #: Messages one sender may have processed per window. Each one costs an LLM
     #: call, so this is a spend control as much as an abuse control.

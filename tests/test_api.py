@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import sqlite3
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -202,6 +203,7 @@ def test_signed_message_is_accepted_and_answered(client: TestClient) -> None:
         "messages": 1,
         "ignored": 0,
         "throttled": 0,
+        "stale": 0,
     }
 
     # TestClient runs background tasks before returning, so the reply is already out.
@@ -226,6 +228,7 @@ def test_message_from_a_stranger_is_dropped_silently(client: TestClient) -> None
         "messages": 0,
         "ignored": 1,
         "throttled": 0,
+        "stale": 0,
     }
 
     # No reply went out...
@@ -395,3 +398,65 @@ def test_typing_is_requested_only_for_messages_that_get_a_reply(
 
     assert ("wamid.text", True) in seen
     assert ("wamid.sticker", False) in seen
+
+
+# --------------------------------------------------------------------------- #
+# Stale redelivered messages
+# --------------------------------------------------------------------------- #
+def _text_event_at(text: str, message_id: str, *, sent_at: float) -> dict[str, object]:
+    """A webhook carrying an explicit WhatsApp send time."""
+    event = _text_event(text, message_id)
+    value = event["entry"][0]["changes"][0]["value"]  # type: ignore[index]
+    value["messages"][0]["timestamp"] = str(int(sent_at))  # type: ignore[index]
+    return event
+
+
+def test_a_message_redelivered_hours_later_is_not_answered(
+    client: TestClient,
+) -> None:
+    """Observed in production: a reply arrived at 09:56 to a message from
+    00:46 the night before, with no user action in between.
+
+    Meta retries webhooks it could not deliver, with backoff, for hours. A free
+    instance that was asleep therefore wakes to a backlog - and answering it
+    reaches the customer as the bot messaging them out of nowhere.
+    """
+    nine_hours_ago = time.time() - 9 * 3600
+    raw, headers = _signed(
+        _text_event_at("yes", "wamid.stale", sent_at=nine_hours_ago)
+    )
+
+    response = client.post("/api/v1/webhook", content=raw, headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stale"] == 1
+    assert body["messages"] == 0
+
+    outbox = client.get("/api/v1/simulate/outbox").json()
+    assert outbox["messages"] == [], "a stale message must produce no reply"
+
+
+def test_a_recent_message_is_answered_normally(client: TestClient) -> None:
+    """The guard must not touch ordinary traffic, which arrives in seconds."""
+    raw, headers = _signed(
+        _text_event_at("hi", "wamid.fresh", sent_at=time.time() - 3)
+    )
+
+    response = client.post("/api/v1/webhook", content=raw, headers=headers)
+
+    body = response.json()
+    assert body["stale"] == 0
+    assert body["messages"] == 1
+
+
+def test_a_message_without_a_timestamp_is_still_answered(
+    client: TestClient,
+) -> None:
+    """Fails open: dropping a real message is far worse than answering an old one."""
+    raw, headers = _signed(_text_event("hi", "wamid.no-timestamp"))
+
+    body = client.post("/api/v1/webhook", content=raw, headers=headers).json()
+
+    assert body["stale"] == 0
+    assert body["messages"] == 1

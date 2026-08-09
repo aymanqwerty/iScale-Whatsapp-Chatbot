@@ -103,6 +103,9 @@ class ConversationService:
                 message=inbound.text or (inbound.reply_id or ""),
                 wa_message_id=inbound.wa_message_id,
                 state=conversation.current_state,
+                # WhatsApp's own send time, so a redelivered message is
+                # recognisable as old rather than looking freshly sent.
+                timestamp=inbound.timestamp,
             )
 
             history = await self._load_history(messages, conversation.id)
