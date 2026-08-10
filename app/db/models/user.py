@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -27,6 +28,17 @@ class User(TimestampMixin, Base):
 
     #: Name from the WhatsApp profile - a useful fallback, but user-editable.
     profile_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    #: True while a human has taken this conversation over from the console.
+    #: Held on the user rather than the conversation because conversations close
+    #: when a lead is created - a handover must survive that, or the bot would
+    #: silently start replying again mid-handover.
+    bot_paused: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
+    paused_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     conversations: Mapped[list[Conversation]] = relationship(
         back_populates="user",

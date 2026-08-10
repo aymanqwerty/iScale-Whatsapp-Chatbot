@@ -94,6 +94,24 @@ class Settings(BaseSettings):
     # served to anyone who can reach the port.
     api_key: SecretStr = SecretStr("")
 
+    # --- Agent console -----------------------------------------------------
+    # The internal handover console. It exposes every customer conversation and
+    # phone number the bot has spoken to, so it is off unless explicitly turned
+    # on and fully configured. A missing hash or secret disables it rather than
+    # falling back to something permissive.
+    #
+    # Generate the two secrets with:
+    #   python -m scripts.console_password
+    console_enabled: bool = False
+    console_username: str = "iScale-user"
+    #: `scrypt$<salt>$<hash>`, never a plain password. Deliberately NOT the
+    #: database password - anyone who learns this must not thereby gain direct
+    #: access to the leads table.
+    console_password_hash: SecretStr = SecretStr("")
+    #: Signs the session cookie. Rotating it logs everyone out immediately,
+    #: which is the fastest revocation available.
+    console_session_secret: SecretStr = SecretStr("")
+
     #: Refuse to act on a message WhatsApp says was sent longer ago than this.
     #:
     #: Meta retries a webhook it could not deliver, with backoff, for hours. A
@@ -212,6 +230,22 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def console_ready(self) -> bool:
+        """Whether the console is switched on AND has everything it needs.
+
+        Both secrets are required. A console served with an empty password hash
+        would authenticate nobody but still expose the login page, and one with
+        an empty signing secret would accept any forged cookie - so a partial
+        configuration is treated as off.
+        """
+        return bool(
+            self.console_enabled
+            and self.console_username
+            and self.console_password_hash.get_secret_value()
+            and self.console_session_secret.get_secret_value()
+        )
 
     def google_credentials_info(self) -> dict[str, Any] | None:
         """Service-account credentials as a dict, from inline JSON or a file.
