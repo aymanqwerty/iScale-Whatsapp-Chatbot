@@ -104,6 +104,11 @@ class MessageSender(StrEnum):
     USER = "USER"
     BOT = "BOT"
     SYSTEM = "SYSTEM"
+    #: A human agent replying from the console during a handover. Stored
+    #: distinctly from BOT so the transcript shows who actually spoke, and so
+    #: the console can style it differently - but it is fed to the model as an
+    #: assistant turn, because from the customer's side it is the same voice.
+    AGENT = "AGENT"
 
 
 class MessageKind(StrEnum):

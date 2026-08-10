@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>iScale Console</title>
+<style>
+  :root { --bg:#111b21; --panel:#202c33; --accent:#00a884; --text:#e9edef; --muted:#8696a0; --err:#f15c6d; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center;
+         background:var(--bg); color:var(--text);
+         font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  form { background:var(--panel); padding:32px; border-radius:12px; width:min(360px,92vw);
+         box-shadow:0 12px 40px rgba(0,0,0,.4); }
+  h1 { margin:0 0 4px; font-size:19px; }
+  p.sub { margin:0 0 24px; color:var(--muted); font-size:13px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:14px 0 6px; text-transform:uppercase;
+          letter-spacing:.04em; }
+  input { width:100%; padding:11px 12px; border-radius:8px; border:1px solid #2a3942;
+          background:#2a3942; color:var(--text); font-size:15px; }
+  input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  button { width:100%; margin-top:22px; padding:12px; border:0; border-radius:8px;
+           background:var(--accent); color:#04231a; font-size:15px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:progress; }
+  .error { margin-top:14px; color:var(--err); font-size:13px; min-height:18px; }
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <h1>iScale Console</h1>
+  <p class="sub">Internal use only</p>
+
+  <label for="u">Username</label>
+  <input id="u" name="username" autocomplete="username" required autofocus>
+
+  <label for="p">Password</label>
+  <input id="p" name="password" type="password" autocomplete="current-password" required>
+
+  <button id="b" type="submit">Sign in</button>
+  <div class="error" id="e" role="alert"></div>
+</form>
+
+<script>
+const f = document.getElementById('f'), b = document.getElementById('b'), e = document.getElementById('e');
+f.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  e.textContent = '';
+  b.disabled = true;
+  // Hashing is intentionally slow server-side, so this takes a moment.
+  b.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/v1/console/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('u').value,
+        password: document.getElementById('p').value,
+      }),
+    });
+    if (r.ok) { location.href = '/api/v1/console/app'; return; }
+    const body = await r.json().catch(() => ({}));
+    e.textContent = body.detail || 'Sign in failed.';
+  } catch {
+    e.textContent = 'Could not reach the server.';
+  }
+  b.disabled = false;
+  b.textContent = 'Sign in';
+});
+</script>
+</body>
+</html>

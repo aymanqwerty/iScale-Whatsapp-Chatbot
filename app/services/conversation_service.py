@@ -108,6 +108,20 @@ class ConversationService:
                 timestamp=inbound.timestamp,
             )
 
+            # Handover gate. Placed AFTER the message is stored and before any
+            # handler runs, which is exactly the behaviour a human takeover
+            # needs: the console still sees the customer's messages arriving
+            # live, and the transcript stays complete for when the bot is handed
+            # back - but nothing is generated, so the customer never gets a menu
+            # or a sales nudge in the middle of talking to a person.
+            if user.bot_paused:
+                await conversations.touch(conversation, last_message=inbound.text)
+                logger.info(
+                    "Message recorded but not answered - conversation is with an agent",
+                    extra={"wa_message_id": inbound.wa_message_id},
+                )
+                return TurnResult(), user.phone
+
             history = await self._load_history(messages, conversation.id)
             ctx = TurnContext(
                 inbound=inbound,
