@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.bot import copy, intents
 from app.bot.context import TurnContext
 from app.bot.handlers.common import answer_question, answer_with_optional_nudge
-from app.bot.handlers.discovery import start_discovery
+from app.bot.handlers.discovery import remember_profile, start_discovery
 from app.domain.enums import ConversationState, LeadType
 from app.domain.messaging import OutboundMessage, TurnResult
 from app.services.knowledge.models import Course
@@ -157,6 +157,12 @@ async def handle_course_qna(ctx: TurnContext) -> TurnResult:
     course = ctx.deps.knowledge_base.match_course(ctx.text)
     if course is not None and course.slug != ctx.conversation.current_course:
         ctx.conversation.current_course = course.slug
+
+    # People volunteer their job here as readily as in discovery - "how does it
+    # help me as a doctor?" is the same question, asked from the menu instead.
+    # Capturing it means the answer is tailored and the lead reaches the
+    # counselor with the context already attached.
+    remember_profile(ctx)
 
     return await answer_with_optional_nudge(ctx)
 

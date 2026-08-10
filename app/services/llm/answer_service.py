@@ -103,6 +103,10 @@ class AnswerService:
             prompt_overrides=self._kb.prompt_overrides,
             upsell_course=upsell.name if upsell else None,
             known_profile=request.known_profile,
+            # The persuasion guidance follows the course, not just the state:
+            # a cohort-menu selection lands in COURSE_QNA but is still the
+            # conversation this funnel exists to win.
+            selling_upsell=bool(upsell and request.course_slug == upsell.slug),
         )
         user_prompt = build_user_prompt(request.question, snippets)
 

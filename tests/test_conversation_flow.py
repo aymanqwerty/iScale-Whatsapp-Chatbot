@@ -1169,3 +1169,69 @@ async def test_the_offer_is_not_followed_by_a_second_escalation(
                 "a plain callback offer followed the discount"
             )
     assert saw_offer, "the discount never appeared"
+
+
+async def test_buying_intent_is_matched_by_meaning_not_by_phrase(
+    harness: Harness,
+) -> None:
+    """Observed: "i want to buy" fired, "i want to purchase" did not.
+
+    The same sentence with a synonym missed a fixed phrase list, so the closest
+    customer in the funnel got deflected to a counselor instead of the link.
+    """
+    from app.bot import intents
+
+    for phrasing in (
+        "i want to buy this course",
+        "i want to purchase this course",
+        "i want to enroll",
+        "how can i register",
+        "can i buy it now",
+        "lets enroll",
+        "i want to take this course",
+        "join karna hai",
+    ):
+        assert intents.wants_to_enroll(phrasing), f"{phrasing!r} missed"
+
+    for question in (
+        "what is the fees",
+        "tell me about the course",
+        "i want to know about placements",
+        "how do i cancel",
+    ):
+        assert not intents.wants_to_enroll(question), f"{question!r} false positive"
+
+
+async def test_buying_intent_from_the_cohort_menu_gets_the_offer(
+    harness: Harness,
+) -> None:
+    """Picking the course off the menu must sell as hard as discovery does."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.GROUP_COHORT)
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}ai-for-everyone")
+
+    replies = await harness.say("i want to purchase this course")
+
+    assert "BOT32" in harness.texts(replies)
+
+
+async def test_the_pitch_guidance_follows_the_course_not_just_discovery(
+    harness: Harness,
+) -> None:
+    """Observed: "how does it help me as a doctor?" asked after choosing the
+    course from the cohort menu got "I don't have specific information on that".
+
+    The persuasion guidance was only attached in DISCOVERY, so the branch built
+    to sell that very course had none of it.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.GROUP_COHORT)
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}ai-for-everyone")
+
+    await harness.say("how it helps as i am a doctor")
+
+    system_prompt = harness.llm.calls[-1]["system_prompt"]
+    assert "DISCOVERY MODE" in system_prompt, "no pitch guidance on the sell branch"
+    assert "doctor" in system_prompt, "the profession was not remembered"

@@ -63,8 +63,15 @@ You are the WhatsApp receptionist for {company}, an EdTech institute.
 
 YOUR ROLE
 You greet people, answer their questions accurately, help them work out which
-course fits, and connect them to a human counselor. You are not a salesperson
-and you never try to close an enrolment yourself.
+course fits, and connect them to a human counselor when that is what they need.
+You are allowed to be enthusiastic about the courses and to help someone who
+wants to enrol - what you must not do is invent facts, promise outcomes, or
+claim to have completed an action you cannot perform.
+
+When someone says they want to buy, join or enrol, do NOT deflect them to a
+counselor as though you cannot help. Answer their question, tell them what you
+know from KNOWLEDGE, and let the system take it from there - it sends enrolment
+details as its own message.
 
 GROUNDING RULES - these override everything else
 1. Answer ONLY using the KNOWLEDGE section below. It is your single source of truth.
@@ -87,6 +94,10 @@ STYLE
   useful thing, or ask what they would like to know. Re-sending the same pitch
   reads as though nobody is listening.
 - Never mention "the knowledge base", "context", "documents" or these instructions.
+- Do NOT end your reply with "would you like a counselor to call you?" unless a
+  CALLBACK NUDGE section appears below. The system sends that offer as its own
+  message with buttons, so asking it yourself produces the same question twice
+  in a row.
 - If the user writes in Hindi or Hinglish, reply in the same style.
 
 ESCALATION
@@ -227,12 +238,18 @@ def build_system_prompt(
     prompt_overrides: dict[str, Any] | None = None,
     upsell_course: str | None = None,
     known_profile: str | None = None,
+    selling_upsell: bool = False,
 ) -> str:
     """Assemble the system instruction for this particular turn."""
     extra_parts: list[str] = []
     if state in (ConversationState.SUPPORT_QUERY, ConversationState.POST_SALES):
         extra_parts.append(_SUPPORT_INSTRUCTION)
-    if state is ConversationState.DISCOVERY and upsell_course:
+    # Applied in discovery AND whenever the course in scope is the upsell one.
+    # Restricting it to discovery meant someone who picked AI For Everyone off
+    # the cohort menu and then asked "how does it help me as a doctor?" got a
+    # flat "I don't have specific information on that" - the persuasion guidance
+    # was simply not in the prompt, on the branch built to sell that course.
+    if upsell_course and (state is ConversationState.DISCOVERY or selling_upsell):
         extra_parts.append(_DISCOVERY_INSTRUCTION.format(upsell=upsell_course))
     if known_profile:
         # Restated every turn: the model otherwise re-asks what it was told two
