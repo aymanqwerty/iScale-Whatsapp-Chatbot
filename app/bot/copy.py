@@ -113,31 +113,35 @@ SUPPORT_OPTIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
 # --------------------------------------------------------------------------- #
 # Menu builders
 # --------------------------------------------------------------------------- #
-def welcome_message(company: str, *, returning_name: str | None = None) -> OutboundMessage:
-    greeting = (
-        f"Welcome back, {returning_name}! 👋" if returning_name else f"Welcome to {company}! 👋"
+def _main_menu_buttons() -> tuple[Button, ...]:
+    """The three main-menu options as inline quick-reply buttons.
+
+    Buttons rather than a list because there are only three of them. A list
+    collapses behind a "Choose an option" tap, so the user has to open it before
+    they can see what is on offer; buttons sit directly under the text and are
+    one tap. WhatsApp allows at most three, which is exactly what this menu has
+    - `OutboundMessage` raises if that is ever exceeded, and the longest title
+    ("Talk to a Counselor", 19 chars) is inside the 20-character button limit.
+    Anything longer would be silently truncated, so `test_button_menu_titles_fit`
+    guards the width.
+    """
+    return tuple(
+        Button(id=oid, title=title) for oid, title, _, _ in MAIN_MENU_OPTIONS
     )
+
+
+def welcome_message(company: str, *, returning_name: str | None = None) -> OutboundMessage:
+    # No header: WhatsApp renders it as a bold line above the text, and "Main
+    # menu" there told the user nothing they could not see from the buttons.
+    greeting = f"Hey {returning_name}! 👋" if returning_name else "Hey! 👋"
     return OutboundMessage(
-        text=f"{greeting}\n\nHow can I help you today?",
-        list_rows=tuple(
-            ListRow(id=oid, title=title)
-            for oid, title, _, _ in MAIN_MENU_OPTIONS
-        ),
-        list_button_label="Choose an option",
-        header="Main menu",
+        text=f"{greeting} I'm {company}'s AI Agent 🤖\n\nHow can I help you today?",
+        buttons=_main_menu_buttons(),
     )
 
 
 def main_menu(prompt: str = "What would you like to do next?") -> OutboundMessage:
-    return OutboundMessage(
-        text=prompt,
-        list_rows=tuple(
-            ListRow(id=oid, title=title)
-            for oid, title, _, _ in MAIN_MENU_OPTIONS
-        ),
-        list_button_label="Choose an option",
-        header="Main menu",
-    )
+    return OutboundMessage(text=prompt, buttons=_main_menu_buttons())
 
 
 def course_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:

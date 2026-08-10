@@ -18,7 +18,9 @@ async def test_greeting_opens_the_main_menu(harness: Harness) -> None:
     replies = await harness.say("Hi")
 
     assert len(replies) == 1
-    assert "Welcome" in replies[0].text
+    # Assert the greeting's shape, not its wording - the copy is tuned often.
+    assert "How can I help you today?" in replies[0].text
+    assert replies[0].buttons, "the options must be inline buttons, not a list"
     option_ids = {oid for oid, _ in replies[0].options}
     assert option_ids == {
         copy.MENU_COURSES,

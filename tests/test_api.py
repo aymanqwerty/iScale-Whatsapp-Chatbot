@@ -209,7 +209,10 @@ def test_signed_message_is_accepted_and_answered(client: TestClient) -> None:
     # TestClient runs background tasks before returning, so the reply is already out.
     outbox = client.get("/api/v1/simulate/outbox").json()
     assert outbox["enabled"] is True
-    assert any("Welcome" in message["text"] for message in outbox["messages"])
+    assert any(
+        "How can I help you today?" in message["text"]
+        for message in outbox["messages"]
+    )
 
 
 # --------------------------------------------------------------------------- #
