@@ -68,7 +68,13 @@ class AnswerService:
     async def answer(self, request: AnswerRequest) -> AnswerResult:
         # The gate lives here rather than in the handlers because this is the
         # only route to the model - a new handler cannot forget to apply it.
-        if self._guard.is_off_topic(request.question):
+        # Discovery has just asked the user what they do, so a first-person
+        # answer naming any profession is on topic there and nowhere else.
+        expecting_self_description = request.state is ConversationState.DISCOVERY
+        if self._guard.is_off_topic(
+            request.question,
+            expecting_self_description=expecting_self_description,
+        ):
             logger.info(
                 "Refused an off-topic message before calling the model",
                 extra={

@@ -67,11 +67,38 @@ _OFF_DOMAIN_PATTERNS: tuple[str, ...] = (
 #: Someone describing their own situation. The discovery branch opens by asking
 #: exactly this, so a message shaped like an answer to it is never off topic -
 #: whatever profession happens to be named.
+#: Verb inflections are matched loosely on purpose. "i owns a restaurant" was
+#: refused because the pattern demanded "i own" - real messages carry typos and
+#: Indian-English inflections, and a guard that refuses a customer over a
+#: trailing "s" is worse than one that lets a stray sentence reach a model which
+#: is already constrained to answer only from the knowledge base.
 _DESCRIBES_SELF = re.compile(
-    r"\b(?:i\s*am|i'm|im|i\s+work|i\s+study|i\s+run|i\s+own|i\s+teach|"
-    r"my\s+profession|my\s+job|my\s+work|working\s+as|studying)\b",
+    r"\b(?:"
+    r"i\s*am|i'?m|im\b|"
+    r"i\s+(?:work|works|working|study|studies|studying|run|runs|running|"
+    r"own|owns|owned|teach|teaches|teaching|do|does|doing|have|has|sell|"
+    r"sells|manage|manages|handle|handles)|"
+    r"we\s+(?:run|own|have|are)|"
+    r"my\s+(?:profession|job|work|business|shop|startup|company|field)|"
+    r"working\s+as|studying|self\s*employed|freelanc"
+    r")\b",
     re.IGNORECASE,
 )
+
+#: Asking for something, as opposed to stating something. Matching a pronoun
+#: was not enough: "tell me a joke" and "what is my horoscope" both contain
+#: first-person words, so a pronoun test let them through in discovery. What
+#: separates them from "restaurant owner" is that they *ask*.
+_LOOKS_LIKE_A_REQUEST = re.compile(
+    r"\b(?:tell|give|show|write|make|create|recommend|suggest|send|explain|"
+    r"find|play|sing|what|whats|which|who|whom|when|where|why|how|can|could|"
+    r"would|will|do|does|did|is|are|should)\b",
+    re.IGNORECASE,
+)
+
+#: The most a bare answer to "what do you do?" is likely to run to. Beyond this
+#: a message is prose, and prose about an off-domain subject deserves the guard.
+_SHORT_ANSWER_WORDS = 5
 
 #: Vocabulary that marks a message as iScale business. Extended at build time
 #: with every course name and keyword, so the catalogue stays the source of
@@ -143,15 +170,24 @@ class TopicGuard:
     def is_injection(self, text: str) -> bool:
         return any(pattern.search(text) for pattern in self._injection)
 
-    def is_off_topic(self, text: str) -> bool:
+    def is_off_topic(
+        self, text: str, *, expecting_self_description: bool = False
+    ) -> bool:
         """True when the message must not reach the model.
 
         Anything short or empty is allowed through - "yes", "ok" and the like
         carry no topic, and the state machine gives them meaning.
+
+        `expecting_self_description` is set when the bot has just asked the user
+        what they do. In that state a first-person reply is an answer to our own
+        question, whatever profession it happens to name, and refusing it is the
+        worst thing the bot can do at the most valuable moment in the funnel.
         """
         stripped = text.strip()
         if not stripped:
             return False
+        # Injection is blocked in every state, including discovery. "Ignore your
+        # instructions" is not a profession.
         if self.is_injection(stripped):
             return True
         if not any(pattern.search(stripped) for pattern in self._off_domain):
@@ -161,6 +197,14 @@ class TopicGuard:
         # trader" or "I work in politics" is refused mid-funnel, and the reply
         # reads as the bot rejecting the person rather than the subject.
         if _DESCRIBES_SELF.search(stripped):
+            return False
+        # A short reply that asks for nothing is an answer to "what do you do?",
+        # even when it names no verb at all - "restaurant owner", "housewife".
+        if (
+            expecting_self_description
+            and len(stripped.split()) <= _SHORT_ANSWER_WORDS
+            and not _LOOKS_LIKE_A_REQUEST.search(stripped)
+        ):
             return False
         # An off-domain subject alongside real iScale vocabulary is usually a
         # genuine question ("do you teach Python for share market analysis?").
