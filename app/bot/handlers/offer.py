@@ -63,19 +63,38 @@ def _relevant(ctx: TurnContext) -> bool:
     return conversation.current_state is ConversationState.DISCOVERY
 
 
+#: Engagement needed before the offer appears unprompted. Lower than the generic
+#: callback threshold: this conversation is already about the course we are
+#: selling, so the discount is the natural next thing rather than an interruption.
+_OFFER_AFTER_EXCHANGES = 2
+
+
+def is_closing_moment(text: str) -> bool:
+    """A signal that the user is ready to hear the price and the code.
+
+    Two kinds. Asking how to buy is obvious. Asking what it *costs* is the one
+    that was being missed: the bot answered "Rs 4,999" and stopped, showing the
+    full price while holding a 32% coupon - the worst possible reply to the
+    question closest to a sale.
+    """
+    return intents.wants_to_enroll(text) or intents.asks_about_price(text)
+
+
 def maybe_offer(ctx: TurnContext, *, force: bool = False) -> TurnResult | None:
     """The offer, if this is a good moment for it. Otherwise None.
 
-    `force` is for an explicit buying signal ("how do I join?"), which earns the
-    offer immediately - waiting to hit a question threshold when someone has
-    just said they want to buy is the clearest way to lose a sale.
+    Fires immediately on a closing signal, and otherwise once the person has
+    engaged for a couple of exchanges. Waiting for a generic question quota when
+    someone has just asked the price is the clearest way to lose a sale.
     """
     conversation = ctx.conversation
     if not offer_is_live(ctx) or not _relevant(ctx):
         return None
     if conversation.current_state not in _SELLING_STATES:
         return None
-    if not force and not ctx.should_nudge_callback():
+
+    closing = force or is_closing_moment(ctx.text)
+    if not closing and ctx.qna_count() < _OFFER_AFTER_EXCHANGES:
         return None
 
     course = ctx.deps.knowledge_base.upsell_course
@@ -91,7 +110,7 @@ def maybe_offer(ctx: TurnContext, *, force: bool = False) -> TurnResult | None:
     ctx.mark_nudged()
     logger.info(
         "Discount offer shown",
-        extra={"state": str(conversation.current_state), "forced": force},
+        extra={"state": str(conversation.current_state), "closing": closing},
     )
 
     result = TurnResult()

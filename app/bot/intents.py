@@ -346,6 +346,27 @@ def wants_to_enroll(text: str) -> bool:
     return bool(_ENROL_RE.search(cleaned))
 
 
+#: Asking what it costs. On the discounted course this is the single best moment
+#: to close: quoting the list price and stopping there, while holding a coupon,
+#: is the worst of both - the person sees the higher number and leaves.
+_PRICE_PHRASES = (
+    "fee", "fees", "price", "cost", "how much", "kitna", "kitne", "charges",
+    "emi", "installment", "instalment", "payment plan", "discount", "offer",
+    "afford", "expensive", "cheap", "budget",
+)
+
+
+def asks_about_price(text: str) -> bool:
+    """Whether the user is asking what it costs."""
+    cleaned = normalize(text)
+    if not cleaned:
+        return False
+    words = set(cleaned.split())
+    if words & {"fee", "fees", "price", "cost", "costs", "charges", "emi"}:
+        return True
+    return any(phrase in cleaned for phrase in _PRICE_PHRASES)
+
+
 def means_undecided(text: str) -> bool:
     """Whether the user is saying they do not know which course they want.
 
