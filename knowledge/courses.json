@@ -2,6 +2,267 @@
   "_comment": "Sourced from theiscale.com, 6 Aug 2026. `featured: true` courses appear directly in the WhatsApp menu; the rest sit behind the 'Other courses' row but stay fully answerable.",
   "courses": [
     {
+      "slug": "ai-for-everyone",
+      "featured": true,
+      "name": "AI For Everyone : Complete Guide",
+      "url": "https://www.theiscale.com/course-details/ai-for-everyone-complete-guide",
+      "short_description": "Use 50+ AI tools for real work - automation, content, images, video, websites, chatbots and no-code apps. No coding needed.",
+      "duration": "120 days of access. 75+ hours of content across 170+ lectures.",
+      "effort": "Self-paced, plus a live marathon class on the 2nd Sunday of every month at 4 PM",
+      "mode": "Online. Mobile friendly, 24/7 access. Bilingual - English and Hindi/Hinglish.",
+      "level": "Completely beginner friendly. Anyone can learn.",
+      "eligibility": "No prior programming or AI knowledge required. Freshers, UG/PG and diploma students, and working professionals.",
+      "fees": {
+        "display": "Rs 4,999 including taxes.",
+        "plans": [
+          {
+            "name": "Standard",
+            "price_inr": 4999,
+            "duration": "120 days access"
+          }
+        ],
+        "installments_available": true,
+        "emi_note": "No-cost EMI available. International students can pay via Razorpay or PayPal.",
+        "refund_note": "Non-refundable once payment is processed.",
+        "counselor_note": "A counselor confirms the current price and any running offer."
+      },
+      "tools": [
+        "ChatGPT",
+        "Claude",
+        "Gemini",
+        "Google AI Studio",
+        "Perplexity",
+        "Grok",
+        "DeepSeek",
+        "Krea AI",
+        "Leonardo AI",
+        "Meta AI",
+        "Notebook LM",
+        "Freepik AI",
+        "n8n",
+        "Ollama",
+        "and 35+ more AI platforms"
+      ],
+      "curriculum": [
+        {
+          "module": "AI basics and prompting",
+          "topics": [
+            "How AI tools work",
+            "Prompt writing",
+            "Choosing the right tool"
+          ]
+        },
+        {
+          "module": "Data automation",
+          "topics": [
+            "Automating repetitive work",
+            "Spreadsheets and documents"
+          ]
+        },
+        {
+          "module": "Image and video creation",
+          "topics": [
+            "Image generation",
+            "Video generation",
+            "Design tools"
+          ]
+        },
+        {
+          "module": "AI automation and agents",
+          "topics": [
+            "Workflow pipelines",
+            "n8n automation",
+            "Multi-modal agents",
+            "MCP"
+          ]
+        },
+        {
+          "module": "Website and app building",
+          "topics": [
+            "No-code website building",
+            "Chatbots",
+            "App development"
+          ]
+        },
+        {
+          "module": "Content writing and SEO",
+          "topics": [
+            "Content systems",
+            "SEO with AI"
+          ]
+        },
+        {
+          "module": "Business applications",
+          "topics": [
+            "Marketing",
+            "Finance and accounting",
+            "Digital marketing"
+          ]
+        }
+      ],
+      "projects": [
+        "Build real automations and AI workflows",
+        "Create content systems end to end",
+        "Build a website and a chatbot without code"
+      ],
+      "batches": {
+        "weekend_available": true,
+        "weekday_available": true,
+        "note": "Self-paced. Live marathon class on the 2nd Sunday of every month at 4 PM."
+      },
+      "certification": "ISO-certified certificate from The iScale, recognised by leading industries.",
+      "career_outcomes": [
+        "Use AI tools in any existing role",
+        "Content creator",
+        "Marketing and operations roles",
+        "Freelance AI automation"
+      ],
+      "mentors": [
+        "Swati Mam",
+        "Nishant Sir",
+        "Priyanshu Sir"
+      ],
+      "keywords": [
+        "ai for everyone",
+        "ai tools",
+        "chatgpt",
+        "no code",
+        "automation",
+        "prompt",
+        "beginner ai",
+        "complete guide",
+        "non technical"
+      ],
+      "group": "cohort",
+      "menu_order": 1,
+      "menu_label": "AI For Everyone"
+    },
+    {
+      "slug": "machine-learning-with-agentic-ai",
+      "featured": true,
+      "name": "Machine Learning with Agentic AI",
+      "url": "https://www.theiscale.com/cohort/course-details/machine-learning-with-agentic-ai",
+      "short_description": "Cohort course taking you from Python basics to supervised and unsupervised machine learning, then into agentic AI, with capstone projects.",
+      "duration": "180 days of access. 114 lectures.",
+      "effort": "Cohort-paced, with a live marathon class.",
+      "mode": "Online. Web and Android app. Bilingual - English and Hindi/Hinglish.",
+      "level": "Beginner to Advanced. Starts from Python basics.",
+      "eligibility": "No prior machine learning knowledge required. Suits students and working professionals who want a technical, hands-on ML track.",
+      "fees": {
+        "display": "Rs 7,999 including taxes, reduced from Rs 10,999.",
+        "plans": [
+          {
+            "name": "Standard",
+            "price_inr": 7999,
+            "duration": "180 days access"
+          }
+        ],
+        "installments_available": true,
+        "emi_note": "No-cost EMI available.",
+        "refund_note": "Non-refundable once payment is processed.",
+        "counselor_note": "A counselor confirms the current price and any running offer."
+      },
+      "tools": [
+        "Python",
+        "NumPy",
+        "Pandas",
+        "scikit-learn",
+        "Agentic AI frameworks"
+      ],
+      "curriculum": [
+        {
+          "module": "Python basics",
+          "topics": [
+            "Syntax",
+            "Data structures",
+            "Control flow"
+          ]
+        },
+        {
+          "module": "Python advance",
+          "topics": [
+            "OOP",
+            "Libraries",
+            "Working with data"
+          ]
+        },
+        {
+          "module": "Maths for ML",
+          "topics": [
+            "Linear algebra",
+            "Statistics",
+            "Probability"
+          ]
+        },
+        {
+          "module": "EDA and feature engineering",
+          "topics": [
+            "Exploratory analysis",
+            "Cleaning",
+            "Feature construction"
+          ]
+        },
+        {
+          "module": "Supervised machine learning",
+          "topics": [
+            "Regression",
+            "Classification",
+            "Model evaluation"
+          ]
+        },
+        {
+          "module": "Unsupervised machine learning",
+          "topics": [
+            "Clustering",
+            "Dimensionality reduction"
+          ]
+        },
+        {
+          "module": "Agentic AI",
+          "topics": [
+            "AI agents",
+            "Tool use",
+            "Workflows"
+          ]
+        },
+        {
+          "module": "Capstone projects",
+          "topics": [
+            "End-to-end ML projects"
+          ]
+        }
+      ],
+      "projects": [
+        "Capstone machine learning projects"
+      ],
+      "batches": {
+        "weekend_available": true,
+        "weekday_available": true,
+        "note": "Cohort course with a live marathon class."
+      },
+      "certification": "Certificate included on completion.",
+      "career_outcomes": [
+        "Machine learning engineer",
+        "Data scientist",
+        "AI engineer"
+      ],
+      "mentors": [],
+      "keywords": [
+        "machine learning",
+        "ml",
+        "agentic ai",
+        "agents",
+        "supervised",
+        "unsupervised",
+        "python",
+        "cohort",
+        "capstone"
+      ],
+      "group": "cohort",
+      "menu_order": 2,
+      "menu_label": "ML with Agentic AI"
+    },
+    {
       "slug": "ai-engineer-advance-program",
       "featured": true,
       "name": "AI Engineer Advance Program",
@@ -15,27 +276,175 @@
       "fees": {
         "display": "Basic Rs 19,999 (6 months); Premium Rs 29,999 (6 months); Pro Rs 39,999 (12 months). All prices include taxes.",
         "plans": [
-          { "name": "Basic", "price_inr": 19999, "duration": "6 months" },
-          { "name": "Premium", "price_inr": 29999, "duration": "6 months" },
-          { "name": "Pro", "price_inr": 39999, "duration": "12 months" }
+          {
+            "name": "Basic",
+            "price_inr": 19999,
+            "duration": "6 months"
+          },
+          {
+            "name": "Premium",
+            "price_inr": 29999,
+            "duration": "6 months"
+          },
+          {
+            "name": "Pro",
+            "price_inr": 39999,
+            "duration": "12 months"
+          }
         ],
         "installments_available": true,
         "emi_note": "No-cost EMI available. International students can pay via Razorpay or PayPal.",
         "counselor_note": "A counselor confirms the current price and any running offer."
       },
-      "tools": ["Python", "NumPy", "Pandas", "Matplotlib", "Seaborn", "Plotly", "Scikit-learn", "TensorFlow", "PyTorch", "Keras", "OpenCV", "YOLO", "LangChain", "LangFlow", "Flask", "Streamlit", "Dash", "MySQL", "PostgreSQL", "Power BI", "Tableau", "DAX", "Power Query", "GitHub", "n8n", "Ollama", "ChatGPT", "Claude", "Gemini", "Perplexity", "DeepSeek", "Jupyter", "PyCharm", "Anaconda", "BeautifulSoup"],
+      "tools": [
+        "Python",
+        "NumPy",
+        "Pandas",
+        "Matplotlib",
+        "Seaborn",
+        "Plotly",
+        "Scikit-learn",
+        "TensorFlow",
+        "PyTorch",
+        "Keras",
+        "OpenCV",
+        "YOLO",
+        "LangChain",
+        "LangFlow",
+        "Flask",
+        "Streamlit",
+        "Dash",
+        "MySQL",
+        "PostgreSQL",
+        "Power BI",
+        "Tableau",
+        "DAX",
+        "Power Query",
+        "GitHub",
+        "n8n",
+        "Ollama",
+        "ChatGPT",
+        "Claude",
+        "Gemini",
+        "Perplexity",
+        "DeepSeek",
+        "Jupyter",
+        "PyCharm",
+        "Anaconda",
+        "BeautifulSoup"
+      ],
       "curriculum": [
-        { "module": "Level 1 - Python basics to advanced", "topics": ["Variables and operators", "Control flow and loops", "Functions", "Strings, lists, tuples, sets, dictionaries", "OOP", "File handling", "Exception handling"] },
-        { "module": "Level 1 - Numerical programming", "topics": ["NumPy", "Pandas", "Matplotlib", "Seaborn", "Plotly"] },
-        { "module": "Level 1 - APIs and prompting", "topics": ["Foundational AI concepts", "Prompt engineering"] },
-        { "module": "Level 1 - Databases and ETL", "topics": ["SQL fundamentals", "DDL and DML", "Joins", "Subqueries", "Aggregate functions"] },
-        { "module": "Level 1 - Exploratory data analysis", "topics": ["Student performance case study", "Forest fires case study", "Flight pricing case study"] },
-        { "module": "Level 2 - Statistics and matrix operations", "topics": ["Central tendency", "Distributions", "Hypothesis testing", "Bayes theorem", "ANOVA"] },
-        { "module": "Level 2 - Feature engineering", "topics": ["Data handling", "Scaling and normalisation", "Encoding techniques"] },
-        { "module": "Level 2 - Supervised learning", "topics": ["Linear and logistic regression", "Decision trees", "SVM", "Naive Bayes", "Ensemble methods", "Boosting", "KNN"] },
-        { "module": "Level 2 - Unsupervised learning", "topics": ["PCA", "Clustering", "Anomaly detection", "Time series"] },
-        { "module": "Deep learning and specialisations", "topics": ["Neural networks", "CNN", "YOLO", "GAN", "NLP", "Computer vision", "AI workflow automation"] },
-        { "module": "Advanced AI technologies", "topics": ["Transformers", "RNN and LSTM", "Generative AI", "LangChain", "RAG models", "Agentic AI", "Multi-agent systems", "Chatbots"] }
+        {
+          "module": "Level 1 - Python basics to advanced",
+          "topics": [
+            "Variables and operators",
+            "Control flow and loops",
+            "Functions",
+            "Strings, lists, tuples, sets, dictionaries",
+            "OOP",
+            "File handling",
+            "Exception handling"
+          ]
+        },
+        {
+          "module": "Level 1 - Numerical programming",
+          "topics": [
+            "NumPy",
+            "Pandas",
+            "Matplotlib",
+            "Seaborn",
+            "Plotly"
+          ]
+        },
+        {
+          "module": "Level 1 - APIs and prompting",
+          "topics": [
+            "Foundational AI concepts",
+            "Prompt engineering"
+          ]
+        },
+        {
+          "module": "Level 1 - Databases and ETL",
+          "topics": [
+            "SQL fundamentals",
+            "DDL and DML",
+            "Joins",
+            "Subqueries",
+            "Aggregate functions"
+          ]
+        },
+        {
+          "module": "Level 1 - Exploratory data analysis",
+          "topics": [
+            "Student performance case study",
+            "Forest fires case study",
+            "Flight pricing case study"
+          ]
+        },
+        {
+          "module": "Level 2 - Statistics and matrix operations",
+          "topics": [
+            "Central tendency",
+            "Distributions",
+            "Hypothesis testing",
+            "Bayes theorem",
+            "ANOVA"
+          ]
+        },
+        {
+          "module": "Level 2 - Feature engineering",
+          "topics": [
+            "Data handling",
+            "Scaling and normalisation",
+            "Encoding techniques"
+          ]
+        },
+        {
+          "module": "Level 2 - Supervised learning",
+          "topics": [
+            "Linear and logistic regression",
+            "Decision trees",
+            "SVM",
+            "Naive Bayes",
+            "Ensemble methods",
+            "Boosting",
+            "KNN"
+          ]
+        },
+        {
+          "module": "Level 2 - Unsupervised learning",
+          "topics": [
+            "PCA",
+            "Clustering",
+            "Anomaly detection",
+            "Time series"
+          ]
+        },
+        {
+          "module": "Deep learning and specialisations",
+          "topics": [
+            "Neural networks",
+            "CNN",
+            "YOLO",
+            "GAN",
+            "NLP",
+            "Computer vision",
+            "AI workflow automation"
+          ]
+        },
+        {
+          "module": "Advanced AI technologies",
+          "topics": [
+            "Transformers",
+            "RNN and LSTM",
+            "Generative AI",
+            "LangChain",
+            "RAG models",
+            "Agentic AI",
+            "Multi-agent systems",
+            "Chatbots"
+          ]
+        }
       ],
       "projects": [
         "Google image scraping with Flask",
@@ -50,10 +459,46 @@
         "note": "Live doubt sessions run 4 days a week. Batch sizes are kept limited. A counselor confirms current batch timings."
       },
       "certification": "ISO-certified certificate from The iScale on completion, plus an Academic Internship Certificate.",
-      "career_support": ["Resume and LinkedIn building", "1:1 portfolio guidance", "AI mock interviews - 2 technical and 2 HR rounds", "Exclusive job portal access", "Monthly live assessments and progress interviews", "Placement preparation module", "Soft skills guidance"],
-      "career_outcomes": ["AI Engineer", "Machine Learning Engineer", "LLM Application Developer", "Deep Learning Engineer", "Data Scientist"],
-      "mentors": ["Swati Mam", "Nishant Sir", "Ayush Kanha Sir (Senior Mentor)", "Priyanshu Sir"],
-      "keywords": ["ai engineer", "ai engineering", "advance program", "llm", "genai", "generative ai", "deep learning", "agentic", "rag", "langchain", "neural network", "computer vision", "nlp"]
+      "career_support": [
+        "Resume and LinkedIn building",
+        "1:1 portfolio guidance",
+        "AI mock interviews - 2 technical and 2 HR rounds",
+        "Exclusive job portal access",
+        "Monthly live assessments and progress interviews",
+        "Placement preparation module",
+        "Soft skills guidance"
+      ],
+      "career_outcomes": [
+        "AI Engineer",
+        "Machine Learning Engineer",
+        "LLM Application Developer",
+        "Deep Learning Engineer",
+        "Data Scientist"
+      ],
+      "mentors": [
+        "Swati Mam",
+        "Nishant Sir",
+        "Ayush Kanha Sir (Senior Mentor)",
+        "Priyanshu Sir"
+      ],
+      "keywords": [
+        "ai engineer",
+        "ai engineering",
+        "advance program",
+        "llm",
+        "genai",
+        "generative ai",
+        "deep learning",
+        "agentic",
+        "rag",
+        "langchain",
+        "neural network",
+        "computer vision",
+        "nlp"
+      ],
+      "group": "advance",
+      "menu_order": 1,
+      "menu_label": "AI Engineer Advance"
     },
     {
       "slug": "data-science-with-generative-ai",
@@ -69,25 +514,133 @@
       "fees": {
         "display": "Basic Rs 19,999 (6 months); Premium Rs 29,999 (6 months); Pro Rs 39,999 (12 months). All prices include taxes.",
         "plans": [
-          { "name": "Basic", "price_inr": 19999, "duration": "6 months" },
-          { "name": "Premium", "price_inr": 29999, "duration": "6 months" },
-          { "name": "Pro", "price_inr": 39999, "duration": "12 months" }
+          {
+            "name": "Basic",
+            "price_inr": 19999,
+            "duration": "6 months"
+          },
+          {
+            "name": "Premium",
+            "price_inr": 29999,
+            "duration": "6 months"
+          },
+          {
+            "name": "Pro",
+            "price_inr": 39999,
+            "duration": "12 months"
+          }
         ],
         "installments_available": true,
         "emi_note": "No-cost EMI available.",
         "counselor_note": "A counselor confirms the current price and any running offer."
       },
-      "tools": ["Python", "Pandas", "NumPy", "Matplotlib", "Seaborn", "Plotly", "Scikit-learn", "TensorFlow", "PyTorch", "Keras", "OpenCV", "Flask", "Streamlit", "BeautifulSoup", "SQL", "MySQL", "PostgreSQL", "Power BI", "Tableau", "Advanced Excel", "Jupyter", "PyCharm"],
+      "tools": [
+        "Python",
+        "Pandas",
+        "NumPy",
+        "Matplotlib",
+        "Seaborn",
+        "Plotly",
+        "Scikit-learn",
+        "TensorFlow",
+        "PyTorch",
+        "Keras",
+        "OpenCV",
+        "Flask",
+        "Streamlit",
+        "BeautifulSoup",
+        "SQL",
+        "MySQL",
+        "PostgreSQL",
+        "Power BI",
+        "Tableau",
+        "Advanced Excel",
+        "Jupyter",
+        "PyCharm"
+      ],
       "curriculum": [
-        { "module": "Python", "topics": ["Basics", "Foundation", "Advanced", "Python libraries across 5 levels"] },
-        { "module": "Statistics", "topics": ["Descriptive statistics", "Probability", "Hypothesis testing"] },
-        { "module": "Feature engineering and EDA", "topics": ["Data cleaning", "Encoding", "Scaling", "Exploratory analysis"] },
-        { "module": "Machine learning", "topics": ["Regression", "Classification", "Decision trees", "SVM", "Naive Bayes", "Ensemble methods", "KNN", "PCA", "Clustering", "Anomaly detection", "Time series"] },
-        { "module": "Deep learning", "topics": ["Neural networks", "CNN", "RNN"] },
-        { "module": "Natural language processing", "topics": ["Text processing", "Embeddings", "Language models"] },
-        { "module": "Computer vision", "topics": ["Image processing", "Object detection"] },
-        { "module": "Generative AI and agentic AI", "topics": ["LLMs", "Prompting", "Agents"] },
-        { "module": "Analytics stack", "topics": ["SQL", "Power BI", "Tableau", "Advanced Excel"] }
+        {
+          "module": "Python",
+          "topics": [
+            "Basics",
+            "Foundation",
+            "Advanced",
+            "Python libraries across 5 levels"
+          ]
+        },
+        {
+          "module": "Statistics",
+          "topics": [
+            "Descriptive statistics",
+            "Probability",
+            "Hypothesis testing"
+          ]
+        },
+        {
+          "module": "Feature engineering and EDA",
+          "topics": [
+            "Data cleaning",
+            "Encoding",
+            "Scaling",
+            "Exploratory analysis"
+          ]
+        },
+        {
+          "module": "Machine learning",
+          "topics": [
+            "Regression",
+            "Classification",
+            "Decision trees",
+            "SVM",
+            "Naive Bayes",
+            "Ensemble methods",
+            "KNN",
+            "PCA",
+            "Clustering",
+            "Anomaly detection",
+            "Time series"
+          ]
+        },
+        {
+          "module": "Deep learning",
+          "topics": [
+            "Neural networks",
+            "CNN",
+            "RNN"
+          ]
+        },
+        {
+          "module": "Natural language processing",
+          "topics": [
+            "Text processing",
+            "Embeddings",
+            "Language models"
+          ]
+        },
+        {
+          "module": "Computer vision",
+          "topics": [
+            "Image processing",
+            "Object detection"
+          ]
+        },
+        {
+          "module": "Generative AI and agentic AI",
+          "topics": [
+            "LLMs",
+            "Prompting",
+            "Agents"
+          ]
+        },
+        {
+          "module": "Analytics stack",
+          "topics": [
+            "SQL",
+            "Power BI",
+            "Tableau",
+            "Advanced Excel"
+          ]
+        }
       ],
       "projects": [
         "COVID-19 impact analysis",
@@ -103,9 +656,36 @@
         "note": "Live doubt classes run 4 days a week. A counselor confirms current batch timings."
       },
       "certification": "Industry-recognised ISO-certified certificate. The Pro plan also includes an Academic Internship Certificate and free access to the Master of Data Analytics course.",
-      "career_support": ["Resume and LinkedIn profile development", "Portfolio building assistance", "AI mock interviews", "Exclusive job portal access", "1:1 mentorship", "Monthly live assessments"],
-      "career_outcomes": ["Data Scientist", "Machine Learning Engineer", "Data Analyst", "AI Engineer", "Business Analyst"],
-      "keywords": ["data science", "generative ai", "genai", "full stack data science", "machine learning", "ml", "deep learning", "statistics", "nlp", "data scientist"]
+      "career_support": [
+        "Resume and LinkedIn profile development",
+        "Portfolio building assistance",
+        "AI mock interviews",
+        "Exclusive job portal access",
+        "1:1 mentorship",
+        "Monthly live assessments"
+      ],
+      "career_outcomes": [
+        "Data Scientist",
+        "Machine Learning Engineer",
+        "Data Analyst",
+        "AI Engineer",
+        "Business Analyst"
+      ],
+      "keywords": [
+        "data science",
+        "generative ai",
+        "genai",
+        "full stack data science",
+        "machine learning",
+        "ml",
+        "deep learning",
+        "statistics",
+        "nlp",
+        "data scientist"
+      ],
+      "group": "advance",
+      "menu_order": 2,
+      "menu_label": "Data Science + GenAI"
     },
     {
       "slug": "master-of-data-analytics",
@@ -121,21 +701,93 @@
       "fees": {
         "display": "Basic Rs 9,999 (3 months); Premium Rs 16,999 (3 months); Pro Rs 23,999 (6 months).",
         "plans": [
-          { "name": "Basic", "price_inr": 9999, "duration": "3 months" },
-          { "name": "Premium", "price_inr": 16999, "duration": "3 months" },
-          { "name": "Pro", "price_inr": 23999, "duration": "6 months" }
+          {
+            "name": "Basic",
+            "price_inr": 9999,
+            "duration": "3 months"
+          },
+          {
+            "name": "Premium",
+            "price_inr": 16999,
+            "duration": "3 months"
+          },
+          {
+            "name": "Pro",
+            "price_inr": 23999,
+            "duration": "6 months"
+          }
         ],
         "installments_available": true,
         "counselor_note": "A counselor confirms the current price and any running offer."
       },
-      "tools": ["Python", "Pandas", "NumPy", "Seaborn", "Plotly", "Advanced Excel", "Power BI", "Power Query", "DAX", "Tableau", "SQL", "PostgreSQL", "MySQL", "Anaconda"],
+      "tools": [
+        "Python",
+        "Pandas",
+        "NumPy",
+        "Seaborn",
+        "Plotly",
+        "Advanced Excel",
+        "Power BI",
+        "Power Query",
+        "DAX",
+        "Tableau",
+        "SQL",
+        "PostgreSQL",
+        "MySQL",
+        "Anaconda"
+      ],
       "curriculum": [
-        { "module": "Python", "topics": ["Basics", "Foundation", "Moderate levels 1 and 2", "Python libraries levels 1 to 3", "Seaborn and Plotly visualisation"] },
-        { "module": "SQL", "topics": ["Units 1-20 covering queries, joins, subqueries and aggregation", "Music Store data project"] },
-        { "module": "Power BI", "topics": ["Core concepts", "DAX functions", "Power Query", "Virat Kohli performance project", "Netflix stock project", "Real estate project"] },
-        { "module": "Excel", "topics": ["Basic", "Intermediate", "Moderate", "Advanced", "Myntra/Ajio online store project"] },
-        { "module": "Tableau", "topics": ["Visualisation fundamentals", "3 capstone projects"] },
-        { "module": "AI tools", "topics": ["20+ AI tools lectures for analysts"] }
+        {
+          "module": "Python",
+          "topics": [
+            "Basics",
+            "Foundation",
+            "Moderate levels 1 and 2",
+            "Python libraries levels 1 to 3",
+            "Seaborn and Plotly visualisation"
+          ]
+        },
+        {
+          "module": "SQL",
+          "topics": [
+            "Units 1-20 covering queries, joins, subqueries and aggregation",
+            "Music Store data project"
+          ]
+        },
+        {
+          "module": "Power BI",
+          "topics": [
+            "Core concepts",
+            "DAX functions",
+            "Power Query",
+            "Virat Kohli performance project",
+            "Netflix stock project",
+            "Real estate project"
+          ]
+        },
+        {
+          "module": "Excel",
+          "topics": [
+            "Basic",
+            "Intermediate",
+            "Moderate",
+            "Advanced",
+            "Myntra/Ajio online store project"
+          ]
+        },
+        {
+          "module": "Tableau",
+          "topics": [
+            "Visualisation fundamentals",
+            "3 capstone projects"
+          ]
+        },
+        {
+          "module": "AI tools",
+          "topics": [
+            "20+ AI tools lectures for analysts"
+          ]
+        }
       ],
       "projects": [
         "COVID-19 impact analysis",
@@ -151,53 +803,126 @@
         "note": "Live doubt resolution runs 4 days a week. Batch sizes are kept limited. A counselor confirms current batch timings."
       },
       "certification": "ISO-certified completion certificate, plus an optional Master of 20+ AI Tools certificate.",
-      "career_support": ["Resume and portfolio building", "Mock interviews - 2 technical and 2 HR in the Pro plan", "Job portal access", "LinkedIn profile guidance", "Placement updates"],
-      "career_outcomes": ["Data Analyst", "Business Analyst", "BI Analyst", "MIS Analyst", "Reporting Analyst"],
-      "keywords": ["data analytics", "master of data analytics", "analyst", "power bi", "tableau", "excel", "sql", "dashboard", "reporting", "business analyst"]
+      "career_support": [
+        "Resume and portfolio building",
+        "Mock interviews - 2 technical and 2 HR in the Pro plan",
+        "Job portal access",
+        "LinkedIn profile guidance",
+        "Placement updates"
+      ],
+      "career_outcomes": [
+        "Data Analyst",
+        "Business Analyst",
+        "BI Analyst",
+        "MIS Analyst",
+        "Reporting Analyst"
+      ],
+      "keywords": [
+        "data analytics",
+        "master of data analytics",
+        "analyst",
+        "power bi",
+        "tableau",
+        "excel",
+        "sql",
+        "dashboard",
+        "reporting",
+        "business analyst"
+      ],
+      "group": "advance",
+      "menu_order": 3,
+      "menu_label": "Master of Analytics"
     },
     {
-      "slug": "ai-for-everyone",
-      "featured": true,
-      "name": "AI For Everyone : Complete Guide",
-      "url": "https://www.theiscale.com/course-details/ai-for-everyone-complete-guide",
-      "short_description": "Use 50+ AI tools for real work - automation, content, images, video, websites, chatbots and no-code apps. No coding needed.",
-      "duration": "120 days of access. 75+ hours of content across 170+ lectures.",
-      "effort": "Self-paced, plus a live marathon class on the 2nd Sunday of every month at 4 PM",
-      "mode": "Online. Mobile friendly, 24/7 access. Bilingual - English and Hindi/Hinglish.",
-      "level": "Completely beginner friendly. Anyone can learn.",
-      "eligibility": "No prior programming or AI knowledge required. Freshers, UG/PG and diploma students, and working professionals.",
+      "slug": "ai-powered-excel",
+      "featured": false,
+      "name": "AI Powered Excel Full Course",
+      "url": "https://www.theiscale.com/course-details/ai-powered-excel-full-course",
+      "short_description": "Excel from fundamentals to PivotTables and XLOOKUP, combined with AI tools for smart reporting and business analysis.",
+      "duration": "30 days of access.",
+      "effort": "Self-paced, recorded content.",
+      "mode": "Online. Web and Android app.",
+      "level": "Beginner to Advanced.",
+      "eligibility": "No prior Excel expertise required.",
       "fees": {
-        "display": "Rs 4,999 including taxes.",
-        "plans": [{ "name": "Standard", "price_inr": 4999, "duration": "120 days access" }],
-        "installments_available": true,
-        "emi_note": "No-cost EMI available. International students can pay via Razorpay or PayPal.",
-        "refund_note": "Non-refundable once payment is processed.",
+        "display": "Rs 1,999 including taxes, reduced from Rs 2,499.",
+        "plans": [
+          {
+            "name": "Standard",
+            "price_inr": 1999,
+            "duration": "30 days access"
+          }
+        ],
+        "installments_available": false,
         "counselor_note": "A counselor confirms the current price and any running offer."
       },
-      "tools": ["ChatGPT", "Claude", "Gemini", "Google AI Studio", "Perplexity", "Grok", "DeepSeek", "Krea AI", "Leonardo AI", "Meta AI", "Notebook LM", "Freepik AI", "n8n", "Ollama", "and 35+ more AI platforms"],
+      "tools": [
+        "Excel",
+        "ChatGPT",
+        "Gemini",
+        "Claude",
+        "Perplexity"
+      ],
       "curriculum": [
-        { "module": "AI basics and prompting", "topics": ["How AI tools work", "Prompt writing", "Choosing the right tool"] },
-        { "module": "Data automation", "topics": ["Automating repetitive work", "Spreadsheets and documents"] },
-        { "module": "Image and video creation", "topics": ["Image generation", "Video generation", "Design tools"] },
-        { "module": "AI automation and agents", "topics": ["Workflow pipelines", "n8n automation", "Multi-modal agents", "MCP"] },
-        { "module": "Website and app building", "topics": ["No-code website building", "Chatbots", "App development"] },
-        { "module": "Content writing and SEO", "topics": ["Content systems", "SEO with AI"] },
-        { "module": "Business applications", "topics": ["Marketing", "Finance and accounting", "Digital marketing"] }
+        {
+          "module": "Excel fundamentals",
+          "topics": [
+            "Formatting",
+            "Formulas",
+            "Filtering",
+            "Sorting"
+          ]
+        },
+        {
+          "module": "Intermediate Excel",
+          "topics": [
+            "Autofill",
+            "Slicers",
+            "Tables"
+          ]
+        },
+        {
+          "module": "Advanced Excel",
+          "topics": [
+            "PivotTables",
+            "VLOOKUP",
+            "XLOOKUP",
+            "Conditional functions"
+          ]
+        },
+        {
+          "module": "AI with Excel",
+          "topics": [
+            "AI tool integration",
+            "Smart reporting",
+            "Data visualisation"
+          ]
+        }
       ],
       "projects": [
-        "Build real automations and AI workflows",
-        "Create content systems end to end",
-        "Build a website and a chatbot without code"
+        "Real-world reporting project work"
       ],
       "batches": {
         "weekend_available": true,
         "weekday_available": true,
-        "note": "Self-paced. Live marathon class on the 2nd Sunday of every month at 4 PM."
+        "note": "Self-paced."
       },
-      "certification": "ISO-certified certificate from The iScale, recognised by leading industries.",
-      "career_outcomes": ["Use AI tools in any existing role", "Content creator", "Marketing and operations roles", "Freelance AI automation"],
-      "mentors": ["Swati Mam", "Nishant Sir", "Priyanshu Sir"],
-      "keywords": ["ai for everyone", "ai tools", "chatgpt", "no code", "automation", "prompt", "beginner ai", "complete guide", "non technical"]
+      "certification": "Certificate on completion.",
+      "career_outcomes": [
+        "Business reporting",
+        "Data analysis support roles"
+      ],
+      "mentors": [],
+      "keywords": [
+        "excel",
+        "spreadsheet",
+        "pivot",
+        "vlookup",
+        "xlookup",
+        "reporting"
+      ],
+      "group": "foundation",
+      "menu_order": 99
     },
     {
       "slug": "advance-python-with-ai-tools",
@@ -211,22 +936,95 @@
       "eligibility": "School, UG, PG and diploma students, and working professionals. No coding background required.",
       "fees": {
         "display": "Rs 8,999 including taxes, reduced from Rs 10,999.",
-        "plans": [{ "name": "Standard", "price_inr": 8999, "duration": "60 days access" }],
+        "plans": [
+          {
+            "name": "Standard",
+            "price_inr": 8999,
+            "duration": "60 days access"
+          }
+        ],
         "installments_available": false,
         "counselor_note": "A counselor confirms the current price and any running offer."
       },
-      "tools": ["Python", "NumPy", "Pandas", "Matplotlib", "Seaborn", "Plotly", "Anaconda", "Jupyter", "ChatGPT", "Gemini", "Claude", "Perplexity", "Groq", "DeepSeek"],
-      "curriculum": [
-        { "module": "Python fundamentals", "topics": ["Variables and operators", "Control flow", "Loops", "Functions"] },
-        { "module": "Data structures", "topics": ["Strings", "Lists", "Tuples", "Sets", "Dictionaries"] },
-        { "module": "Advanced Python", "topics": ["Object oriented programming", "File handling", "Exception handling"] },
-        { "module": "Core libraries", "topics": ["NumPy", "Pandas", "Matplotlib", "Seaborn", "Plotly"] },
-        { "module": "AI tools integration", "topics": ["10 AI tools for developers"] }
+      "tools": [
+        "Python",
+        "NumPy",
+        "Pandas",
+        "Matplotlib",
+        "Seaborn",
+        "Plotly",
+        "Anaconda",
+        "Jupyter",
+        "ChatGPT",
+        "Gemini",
+        "Claude",
+        "Perplexity",
+        "Groq",
+        "DeepSeek"
       ],
-      "projects": ["5 industry-standard capstone projects with complete datasets included"],
+      "curriculum": [
+        {
+          "module": "Python fundamentals",
+          "topics": [
+            "Variables and operators",
+            "Control flow",
+            "Loops",
+            "Functions"
+          ]
+        },
+        {
+          "module": "Data structures",
+          "topics": [
+            "Strings",
+            "Lists",
+            "Tuples",
+            "Sets",
+            "Dictionaries"
+          ]
+        },
+        {
+          "module": "Advanced Python",
+          "topics": [
+            "Object oriented programming",
+            "File handling",
+            "Exception handling"
+          ]
+        },
+        {
+          "module": "Core libraries",
+          "topics": [
+            "NumPy",
+            "Pandas",
+            "Matplotlib",
+            "Seaborn",
+            "Plotly"
+          ]
+        },
+        {
+          "module": "AI tools integration",
+          "topics": [
+            "10 AI tools for developers"
+          ]
+        }
+      ],
+      "projects": [
+        "5 industry-standard capstone projects with complete datasets included"
+      ],
       "certification": "ISO-certified completion certificate at no extra cost.",
-      "career_outcomes": ["Foundation for data analytics, data science and AI roles"],
-      "keywords": ["python", "advance python", "programming", "coding", "numpy", "pandas", "foundation"]
+      "career_outcomes": [
+        "Foundation for data analytics, data science and AI roles"
+      ],
+      "keywords": [
+        "python",
+        "advance python",
+        "programming",
+        "coding",
+        "numpy",
+        "pandas",
+        "foundation"
+      ],
+      "group": "foundation",
+      "menu_order": 99
     },
     {
       "slug": "power-bi-tableau",
@@ -240,47 +1038,151 @@
       "eligibility": "Freshers, UG/PG and diploma students, and working professionals.",
       "fees": {
         "display": "Rs 4,999 including taxes, reduced from Rs 5,999.",
-        "plans": [{ "name": "Standard", "price_inr": 4999 }],
+        "plans": [
+          {
+            "name": "Standard",
+            "price_inr": 4999
+          }
+        ],
         "installments_available": false,
         "counselor_note": "A counselor confirms the current price and any running offer."
       },
-      "tools": ["Power BI", "Tableau", "Power Query", "DAX"],
-      "curriculum": [
-        { "module": "Power BI fundamentals to advanced", "topics": ["Modules 1-13 covering core concepts and advanced functions"] },
-        { "module": "DAX and Power Query", "topics": ["Modules 14-19"] },
-        { "module": "Tableau", "topics": ["Modules 20-36 covering visualisation, charts and dashboards"] }
+      "tools": [
+        "Power BI",
+        "Tableau",
+        "Power Query",
+        "DAX"
       ],
-      "projects": ["London Bike Ride dashboard", "FIFA World Cup dashboard"],
+      "curriculum": [
+        {
+          "module": "Power BI fundamentals to advanced",
+          "topics": [
+            "Modules 1-13 covering core concepts and advanced functions"
+          ]
+        },
+        {
+          "module": "DAX and Power Query",
+          "topics": [
+            "Modules 14-19"
+          ]
+        },
+        {
+          "module": "Tableau",
+          "topics": [
+            "Modules 20-36 covering visualisation, charts and dashboards"
+          ]
+        }
+      ],
+      "projects": [
+        "London Bike Ride dashboard",
+        "FIFA World Cup dashboard"
+      ],
       "certification": "ISO-certified certificate from The iScale on completion, with no additional fee.",
-      "career_outcomes": ["BI Analyst", "Reporting Analyst", "Data Analyst"],
-      "keywords": ["power bi", "powerbi", "tableau", "visualization", "visualisation", "dax", "power query", "dashboard", "bi"]
+      "career_outcomes": [
+        "BI Analyst",
+        "Reporting Analyst",
+        "Data Analyst"
+      ],
+      "keywords": [
+        "power bi",
+        "powerbi",
+        "tableau",
+        "visualization",
+        "visualisation",
+        "dax",
+        "power query",
+        "dashboard",
+        "bi"
+      ],
+      "group": "foundation",
+      "menu_order": 99
     },
     {
-      "slug": "free-data-science",
+      "slug": "free-ai-engineer",
       "featured": false,
-      "name": "Free Data Science Course",
-      "url": "https://www.theiscale.com/course-details/free-data-science-course",
-      "short_description": "A free 100-day introduction to data science - Python, statistics, machine learning and Power BI.",
-      "duration": "100 days. 65+ hours of content.",
-      "mode": "Online, self-paced recorded content.",
-      "level": "Absolute beginner. Zero coding knowledge required.",
-      "eligibility": "Open to everyone - freshers, professionals and career switchers into IT.",
+      "name": "Free AI Engineer Course",
+      "url": "https://www.theiscale.com/course-details/free-ai-engineer-course",
+      "short_description": "Free introduction to AI engineering: Python, statistics and machine learning fundamentals. Covers roughly 5-8% of job-oriented content.",
+      "duration": "15 days. 20+ hours of content.",
+      "effort": "Self-paced, recorded content.",
+      "mode": "Online. Web and Android app.",
+      "level": "Absolute beginner. For IT and non-IT learners with zero coding experience.",
+      "eligibility": "Open to anyone. No prerequisites.",
       "fees": {
         "display": "Free.",
-        "plans": [{ "name": "Free", "price_inr": 0 }],
+        "plans": [
+          {
+            "name": "Free",
+            "price_inr": 0
+          }
+        ],
         "installments_available": false
       },
-      "tools": ["Python", "Power BI", "GitHub"],
-      "curriculum": [
-        { "module": "Python", "topics": ["28 lectures covering programming fundamentals"] },
-        { "module": "Statistics", "topics": ["3 lectures"] },
-        { "module": "Machine learning", "topics": ["30 days of focused content"] },
-        { "module": "Power BI", "topics": ["Dashboard fundamentals"] }
+      "tools": [
+        "Python",
+        "NumPy",
+        "Pandas",
+        "GitHub"
       ],
-      "projects": ["Industry-oriented projects with free study materials, datasets and GitHub access"],
+      "curriculum": [
+        {
+          "module": "Python programming",
+          "topics": [
+            "Conditionals",
+            "Data structures",
+            "NumPy",
+            "Pandas"
+          ]
+        },
+        {
+          "module": "Data visualisation and voice AI",
+          "topics": [
+            "Plotting",
+            "Voice AI basics"
+          ]
+        },
+        {
+          "module": "Statistics",
+          "topics": [
+            "Descriptive",
+            "Inferential",
+            "Hypothesis testing"
+          ]
+        },
+        {
+          "module": "Machine learning fundamentals",
+          "topics": [
+            "Linear and logistic regression",
+            "KNN",
+            "Decision trees",
+            "Ensemble methods",
+            "Clustering"
+          ]
+        }
+      ],
+      "projects": [
+        "Hands-on projects with downloadable datasets"
+      ],
+      "batches": {
+        "weekend_available": true,
+        "weekday_available": true,
+        "note": "Self-paced."
+      },
       "certification": "No certificate is issued for this free course.",
-      "career_outcomes": ["Foundation only - covers roughly 5-8% of job-oriented content. A paid program is needed for job readiness."],
-      "keywords": ["free data science", "free course", "free", "trial", "demo", "no cost"]
+      "career_outcomes": [
+        "Foundation before a paid AI or data track"
+      ],
+      "mentors": [],
+      "keywords": [
+        "free",
+        "ai engineer",
+        "python",
+        "statistics",
+        "machine learning",
+        "beginner"
+      ],
+      "group": "free",
+      "menu_order": 99
     },
     {
       "slug": "free-data-analytics",
@@ -294,20 +1196,138 @@
       "eligibility": "Open to everyone, aimed at students and professionals outside the IT industry.",
       "fees": {
         "display": "Free.",
-        "plans": [{ "name": "Free", "price_inr": 0 }],
+        "plans": [
+          {
+            "name": "Free",
+            "price_inr": 0
+          }
+        ],
         "installments_available": false
       },
-      "tools": ["Python", "NumPy", "Pandas", "Power BI", "SQL"],
-      "curriculum": [
-        { "module": "Python", "topics": ["Programming basics", "NumPy", "Pandas"] },
-        { "module": "Power BI", "topics": ["Fundamentals through advanced features"] },
-        { "module": "SQL", "topics": ["Query basics"] },
-        { "module": "Interview preparation", "topics": ["Common analytics interview questions"] }
+      "tools": [
+        "Python",
+        "NumPy",
+        "Pandas",
+        "Power BI",
+        "SQL"
       ],
-      "projects": ["Amazon and Flipkart dashboards", "Netflix dashboard", "WhatsApp chat analysis"],
+      "curriculum": [
+        {
+          "module": "Python",
+          "topics": [
+            "Programming basics",
+            "NumPy",
+            "Pandas"
+          ]
+        },
+        {
+          "module": "Power BI",
+          "topics": [
+            "Fundamentals through advanced features"
+          ]
+        },
+        {
+          "module": "SQL",
+          "topics": [
+            "Query basics"
+          ]
+        },
+        {
+          "module": "Interview preparation",
+          "topics": [
+            "Common analytics interview questions"
+          ]
+        }
+      ],
+      "projects": [
+        "Amazon and Flipkart dashboards",
+        "Netflix dashboard",
+        "WhatsApp chat analysis"
+      ],
       "certification": "No certificate is issued for this free course.",
-      "career_outcomes": ["Foundation only. A paid program is needed for job readiness."],
-      "keywords": ["free data analytics", "free analytics", "free course", "free", "trial", "demo", "no cost"]
+      "career_outcomes": [
+        "Foundation only. A paid program is needed for job readiness."
+      ],
+      "keywords": [
+        "free data analytics",
+        "free analytics",
+        "free course",
+        "free",
+        "trial",
+        "demo",
+        "no cost"
+      ],
+      "group": "free",
+      "menu_order": 99
+    },
+    {
+      "slug": "free-data-science",
+      "featured": false,
+      "name": "Free Data Science Course",
+      "url": "https://www.theiscale.com/course-details/free-data-science-course",
+      "short_description": "A free 100-day introduction to data science - Python, statistics, machine learning and Power BI.",
+      "duration": "100 days. 65+ hours of content.",
+      "mode": "Online, self-paced recorded content.",
+      "level": "Absolute beginner. Zero coding knowledge required.",
+      "eligibility": "Open to everyone - freshers, professionals and career switchers into IT.",
+      "fees": {
+        "display": "Free.",
+        "plans": [
+          {
+            "name": "Free",
+            "price_inr": 0
+          }
+        ],
+        "installments_available": false
+      },
+      "tools": [
+        "Python",
+        "Power BI",
+        "GitHub"
+      ],
+      "curriculum": [
+        {
+          "module": "Python",
+          "topics": [
+            "28 lectures covering programming fundamentals"
+          ]
+        },
+        {
+          "module": "Statistics",
+          "topics": [
+            "3 lectures"
+          ]
+        },
+        {
+          "module": "Machine learning",
+          "topics": [
+            "30 days of focused content"
+          ]
+        },
+        {
+          "module": "Power BI",
+          "topics": [
+            "Dashboard fundamentals"
+          ]
+        }
+      ],
+      "projects": [
+        "Industry-oriented projects with free study materials, datasets and GitHub access"
+      ],
+      "certification": "No certificate is issued for this free course.",
+      "career_outcomes": [
+        "Foundation only - covers roughly 5-8% of job-oriented content. A paid program is needed for job readiness."
+      ],
+      "keywords": [
+        "free data science",
+        "free course",
+        "free",
+        "trial",
+        "demo",
+        "no cost"
+      ],
+      "group": "free",
+      "menu_order": 99
     }
   ]
 }

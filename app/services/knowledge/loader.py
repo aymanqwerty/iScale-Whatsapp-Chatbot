@@ -157,6 +157,28 @@ class KnowledgeBase:
             return []
         return [course for course in self._courses if not course.featured]
 
+    def courses_in_group(self, group: str) -> list[Course]:
+        """Courses in one menu branch, in the order the business wants them.
+
+        This is what builds the cohort and advance submenus, so the sequence is
+        `menu_order` first and the name only as a tie-break - never alphabetical
+        by accident.
+        """
+        wanted = group.strip().lower()
+        matching = [c for c in self._courses if c.group == wanted]
+        return sorted(matching, key=lambda c: (c.menu_order, c.name))
+
+    @property
+    def upsell_course(self) -> Course | None:
+        """The course the funnel steers toward when the user is undecided.
+
+        AI For Everyone: the cheapest paid course, no prerequisites, and useful
+        in any profession - which is what makes it the one course that can be
+        recommended to someone whose background we have only just learned.
+        Resolved by slug so the pitch cannot silently point at nothing.
+        """
+        return self._courses_by_slug.get("ai-for-everyone")
+
     @property
     def snippets(self) -> list[KnowledgeSnippet]:
         return list(self._snippets)

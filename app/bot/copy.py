@@ -7,7 +7,7 @@ handler.
 
 from __future__ import annotations
 
-from app.domain.messaging import Button, ListRow, OutboundMessage
+from app.domain.messaging import MAX_BUTTONS, Button, ListRow, OutboundMessage
 from app.services.knowledge.loader import KnowledgeBase
 
 # --------------------------------------------------------------------------- #
@@ -26,6 +26,18 @@ COURSE_UNSURE = "course:unsure"
 #: Opens the second-level list of non-featured courses.
 COURSE_OTHERS = "course:others"
 
+#: Course-group rows, mirroring the site's own grouping. Only these two groups
+#: are ever offered; `foundation` and `free` courses stay answerable by name but
+#: the funnel never volunteers them.
+GROUP_PREFIX = "group:"
+GROUP_COHORT = "group:cohort"
+GROUP_ADVANCE = "group:advance"
+
+#: "Already Enrolled" splits here before anything else is asked. A free-course
+#: student gets no callback - they re-enter the pre-sales funnel instead.
+ENROLLED_FREE = "enrolled:free"
+ENROLLED_PAID = "enrolled:paid"
+
 SUPPORT_PREFIX = "support:"
 
 RESCHEDULE_MOVE = "reschedule:move"
@@ -33,6 +45,10 @@ RESCHEDULE_NEW = "reschedule:new"
 
 CONFIRM_YES = "confirm:yes"
 CONFIRM_NO = "confirm:no"
+
+#: Phone confirmation during capture.
+PHONE_CONFIRM = "phone:confirm"
+PHONE_OTHER = "phone:other"
 
 #: (id, title, description, keywords the user might type instead of tapping)
 #:
@@ -70,44 +86,50 @@ MAIN_MENU_OPTIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ),
 )
 
+#: Three options, not six. A paid student is about to be asked for name, email
+#: and enrolled course, so the issue menu has to be quick - it is a routing
+#: label for the support team, not a diagnosis.
+#:
+#: The retired ids (`support:assignment`, `:placement`, `:certificate`,
+#: `:timing`) are still matched by `issue_label_for` below. WhatsApp messages
+#: never expire, so someone scrolling back to an old menu can still tap one, and
+#: a dropped branch would answer them with "I didn't understand that".
 SUPPORT_OPTIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     (
-        f"{SUPPORT_PREFIX}assignment",
-        "Assignment",
-        "Submissions, deadlines, feedback",
-        ("assignment", "homework", "submission", "project", "deadline"),
+        f"{SUPPORT_PREFIX}video",
+        "Video Related",
+        "Playback, access or content issues",
+        ("video", "lecture", "playback", "buffering", "recording", "not playing"),
     ),
     (
         f"{SUPPORT_PREFIX}technical",
         "Technical Issue",
         "Login, portal or access problems",
-        ("technical", "login", "portal", "password", "access", "error", "bug", "issue"),
-    ),
-    (
-        f"{SUPPORT_PREFIX}placement",
-        "Placement",
-        "Placement support and preparation",
-        ("placement", "job", "interview", "resume", "referral", "career"),
-    ),
-    (
-        f"{SUPPORT_PREFIX}certificate",
-        "Certificate",
-        "Completion certificate queries",
-        ("certificate", "certification", "completion"),
-    ),
-    (
-        f"{SUPPORT_PREFIX}timing",
-        "Class Timing",
-        "Schedule, batch and class links",
-        ("timing", "time", "schedule", "batch", "class", "link", "session"),
+        ("technical", "login", "portal", "password", "access", "error", "bug", "app"),
     ),
     (
         f"{SUPPORT_PREFIX}other",
         "Other",
         "Something else",
-        ("other", "else", "different"),
+        ("other", "else", "different", "assignment", "placement", "certificate", "timing"),
     ),
 )
+
+#: Ids that were on the old six-row support menu. Mapped rather than dropped.
+_RETIRED_SUPPORT_IDS: dict[str, str] = {
+    f"{SUPPORT_PREFIX}assignment": "Assignment",
+    f"{SUPPORT_PREFIX}placement": "Placement",
+    f"{SUPPORT_PREFIX}certificate": "Certificate",
+    f"{SUPPORT_PREFIX}timing": "Class Timing",
+}
+
+
+def issue_label_for(option_id: str) -> str | None:
+    """Human label for a support option id, including retired ones."""
+    for oid, title, _, _ in SUPPORT_OPTIONS:
+        if oid == option_id:
+            return title
+    return _RETIRED_SUPPORT_IDS.get(option_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -144,32 +166,95 @@ def main_menu(prompt: str = "What would you like to do next?") -> OutboundMessag
     return OutboundMessage(text=prompt, buttons=_main_menu_buttons())
 
 
-def course_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:
-    """Built from `courses.json`, so adding a course needs no code change.
+def _choices(
+    text: str,
+    options: list[tuple[str, str]],
+    *,
+    list_button_label: str = "Choose",
+    header: str | None = None,
+) -> OutboundMessage:
+    """Render (id, title) pairs as buttons, or a list once there are too many.
 
-    Only the flagged (`featured: true`) courses get a row. The rest sit behind
-    one "Other courses" row - a short list converts better than a wall of
-    options, and WhatsApp caps a list at ten rows regardless.
+    Buttons are the better widget: they sit under the text and are one tap,
+    where a list hides everything behind "Choose an option". But WhatsApp allows
+    only three, and these menus are built from `courses.json` - so adding a
+    fourth advance course would otherwise raise at send time, in production, on
+    a live conversation. Falling back to a list keeps that a formatting change
+    instead of an outage.
     """
-    rows = [
-        ListRow(id=f"{COURSE_PREFIX}{course.slug}", title=course.name)
-        for course in knowledge_base.featured_courses
-    ]
-    # Reserve the last two rows for "Other courses" and "Not sure".
-    rows = rows[:8]
-    if knowledge_base.other_courses:
-        rows.append(
-            ListRow(id=COURSE_OTHERS, title="Other courses")
+    if len(options) <= MAX_BUTTONS:
+        return OutboundMessage(
+            text=text,
+            buttons=tuple(Button(id=oid, title=title) for oid, title in options),
         )
-    rows.append(
-        ListRow(id=COURSE_UNSURE, title="Not sure yet")
-    )
     return OutboundMessage(
-        text="Here are our main programs. Which one would you like to know about?",
-        list_rows=tuple(rows),
-        list_button_label="View courses",
-        header="Our courses",
+        text=text,
+        list_rows=tuple(ListRow(id=oid, title=title) for oid, title in options),
+        list_button_label=list_button_label,
+        header=header,
     )
+
+
+def course_group_menu() -> OutboundMessage:
+    """First level of the pre-sales branch: which kind of course.
+
+    Cohort is offered first deliberately - it holds AI For Everyone, which is
+    the course this funnel is built to sell.
+    """
+    return _choices(
+        "Great! What are you looking for?",
+        [
+            (GROUP_COHORT, "Cohort Courses"),
+            (GROUP_ADVANCE, "Advance Courses"),
+            (COURSE_UNSURE, "Not sure yet"),
+        ],
+    )
+
+
+def course_group_submenu(
+    knowledge_base: KnowledgeBase, group: str
+) -> OutboundMessage:
+    """The courses inside one group, in the order `courses.json` specifies."""
+    courses = knowledge_base.courses_in_group(group)
+    prompt = (
+        "Both of these are beginner friendly - no coding background needed.\n\n"
+        "Which one shall I tell you about?"
+        if group == "cohort"
+        else "Our advance programs. Which one would you like to know about?"
+    )
+    # No "Not sure yet" row here. The spec is two rows for cohort and three for
+    # advance, and a fourth would tip advance over WhatsApp's three-button limit
+    # into a list - collapsing the courses behind an extra tap. Anyone still
+    # undecided can say so, which `means_undecided` catches.
+    options = [
+        (f"{COURSE_PREFIX}{course.slug}", course.menu_label) for course in courses
+    ]
+    return _choices(prompt, options, list_button_label="View courses", header="Courses")
+
+
+def enrollment_type_menu() -> OutboundMessage:
+    """Splits "Already Enrolled" before any details are asked.
+
+    Free-course students are not offered a callback at all, so the split has to
+    happen before the support menu rather than after it.
+    """
+    return _choices(
+        "Got it! Which one are you enrolled in?",
+        [
+            (ENROLLED_PAID, "Paid Course"),
+            (ENROLLED_FREE, "Free Course"),
+        ],
+    )
+
+
+def course_menu() -> OutboundMessage:
+    """Entry point to the course branch.
+
+    Kept as the name every caller already uses; it now opens the group menu
+    rather than listing every featured course at once, so it no longer needs the
+    knowledge base.
+    """
+    return course_group_menu()
 
 
 def other_courses_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:
@@ -188,13 +273,22 @@ def other_courses_menu(knowledge_base: KnowledgeBase) -> OutboundMessage:
 
 
 def support_menu() -> OutboundMessage:
-    return OutboundMessage(
-        text="Sure - what do you need help with?",
-        list_rows=tuple(
-            ListRow(id=oid, title=title) for oid, title, _, _ in SUPPORT_OPTIONS
-        ),
+    return _choices(
+        "Sure - what do you need help with?",
+        [(oid, title) for oid, title, _, _ in SUPPORT_OPTIONS],
         list_button_label="Choose a topic",
         header="Student support",
+    )
+
+
+def phone_confirm(phone: str) -> OutboundMessage:
+    """Confirm the WhatsApp number, or invite a different one."""
+    return OutboundMessage(
+        text=ASK_PHONE.format(phone=phone),
+        buttons=(
+            Button(id=PHONE_CONFIRM, title="Yes, this one"),
+            Button(id=PHONE_OTHER, title="Different number"),
+        ),
     )
 
 
@@ -218,15 +312,56 @@ COURSE_SELECTED = (
     "Ask me anything about it: duration, syllabus, projects, eligibility or batches."
 )
 
+#: Opens the discovery branch. Asks one thing, not three - a single easy
+#: question gets answered, a form does not. What they do is the hook the whole
+#: AI For Everyone pitch hangs on, so it is the one thing worth asking for.
 UNSURE_COURSE = (
-    "No problem, that's a common question. Tell me a little about yourself - "
-    "your background and what kind of role you're aiming for - and I'll point you "
-    "to the right program."
+    "No problem at all - most people start here! 😊\n\n"
+    "Just tell me what you do right now - studying, working, running your own "
+    "thing - and I'll show you exactly where AI fits into it."
+)
+
+#: A free-course student asking for support. We do not staff callbacks for free
+#: courses, so this says so plainly and then does the one useful thing left:
+#: treats them as a warm pre-sales lead, because they have already shown intent.
+FREE_COURSE_NO_SUPPORT = (
+    "Thanks for learning with us! 🙌\n\n"
+    "Quick heads-up: our free courses don't come with one-on-one support or "
+    "counselor calls - they're self-paced, so everything runs through the app.\n\n"
+    "That said, since you've already made a start - what are you doing at the "
+    "moment, studying or working? I'll show you what to pick up next."
 )
 
 GENERAL_QNA_INTRO = (
     "Of course - go ahead and ask. I can help with course comparisons, "
     "learning roadmaps, prerequisites and career questions."
+)
+
+#: Phone confirmation. We already know the WhatsApp number, so asking them to
+#: type ten digits they have already effectively given us is pure friction -
+#: but a counselor ringing the WhatsApp number when they wanted their office
+#: line loses the call, so it is confirmed rather than assumed.
+ASK_PHONE = (
+    "And is {phone} the best number to call you on?\n\n"
+    "Tap to confirm, or just send me a different number."
+)
+
+ASK_EMAIL = (
+    "What's your email address? We use it to pull up your enrollment before "
+    "the team calls."
+)
+
+ASK_ENROLLED_COURSE = "Which course are you enrolled in?"
+
+#: Shown when a paid student will not give the details a support call needs.
+#: Deliberately not a dead end: it explains the reason, leaves the conversation
+#: open, and never scolds. They may simply have mistyped an email.
+POST_SALES_DETAILS_REQUIRED = (
+    "I'm sorry - I can't book a support call without your {missing}. 🙏\n\n"
+    "It's how the team pulls up your enrollment before they ring, so they're "
+    "not asking you to prove who you are on the call itself.\n\n"
+    "Happy to take it whenever you're ready, and I can still answer anything "
+    "else in the meantime."
 )
 
 ASK_CALLBACK_PRE_SALES = (

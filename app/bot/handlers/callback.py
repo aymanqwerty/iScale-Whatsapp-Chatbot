@@ -7,10 +7,20 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.bot import copy, intents
+from app.bot.handlers.capture import (
+    absorb_slots,
+    confirm_phone,
+    missing_labels,
+    next_question,
+)
 from app.bot.context import (
     CTX_NAME_ATTEMPTS,
     CTX_PENDING_DATE,
+    CTX_CONTACT_PHONE,
+    CTX_EMAIL,
+    CTX_ENROLLED_COURSE,
     CTX_PENDING_NAME,
+    CTX_PROFILE,
     CTX_PENDING_TIME,
     CTX_PENDING_TIME_RAW,
     CTX_RESCHEDULE_LEAD_ID,
@@ -35,6 +45,10 @@ logger = get_logger(__name__)
 #: After this many unusable replies we stop asking and accept whatever was sent,
 #: rather than trapping the user in a loop over a name field.
 _MAX_NAME_ATTEMPTS = 2
+
+#: Times a required post-sales slot is asked for before we stop and explain.
+#: One retry covers a typo; a third ask reads as badgering.
+_MAX_SLOT_ATTEMPTS = 2
 
 
 async def handle_ask_callback(ctx: TurnContext) -> TurnResult:
@@ -70,12 +84,112 @@ async def handle_ask_callback(ctx: TurnContext) -> TurnResult:
     return result
 
 
+async def handle_ask_email(ctx: TurnContext) -> TurnResult:
+    """Post-sales: take the email, or explain why we cannot book without it."""
+    return await _capture_turn(ctx, expecting=CTX_EMAIL)
+
+
+async def handle_ask_enrolled_course(ctx: TurnContext) -> TurnResult:
+    """Post-sales: which course they are enrolled in."""
+    return await _capture_turn(ctx, expecting=CTX_ENROLLED_COURSE)
+
+
+async def handle_ask_phone(ctx: TurnContext) -> TurnResult:
+    """Confirm the WhatsApp number, or take a different one.
+
+    Never a dead end for the message itself. Someone answering "tomorrow 11:30"
+    here has moved on to the next question in their head, and swallowing that as
+    a failed phone answer loses the time entirely - the user then has to say it
+    twice. So an answer that is plainly not a number is taken as tacit
+    acceptance of the WhatsApp number, and the message is passed to whatever we
+    would have asked next.
+    """
+    if confirm_phone(ctx):
+        follow_up = next_question(ctx)
+        if follow_up is not None:
+            return follow_up
+        return await _create_lead(ctx, remarks=None)
+
+    # Not a number and not a confirmation: accept the WhatsApp number and let
+    # the message answer the next question instead of discarding it.
+    ctx.conversation.set_ctx(CTX_CONTACT_PHONE, ctx.user.phone)
+    if not ctx.conversation.get_ctx(CTX_PENDING_TIME):
+        ctx.conversation.current_state = ConversationState.ASK_CALLBACK_TIME
+        return await handle_ask_callback_time(ctx)
+
+    follow_up = next_question(ctx)
+    if follow_up is not None:
+        return follow_up
+    return await _create_lead(ctx, remarks=None)
+
+
+async def _capture_turn(ctx: TurnContext, *, expecting: str) -> TurnResult:
+    """One slot-filling turn: absorb whatever arrived, then ask for the rest.
+
+    If the user declines the specific thing we asked for, say plainly why it is
+    needed and stop - without ending the conversation. They may have mistyped an
+    address, or want to check it; a booking refused politely can still happen
+    five messages later, and a dead end cannot.
+    """
+    filled = absorb_slots(ctx)
+
+    # A tapped button is never a refusal of this question - it is a stray tap on
+    # an older message, and `is_skip("")` is true for the empty text a tap
+    # carries. Without this guard, tapping anything at all during the email
+    # question was read as "I refuse to give it".
+    conversation = ctx.conversation
+    declined = (
+        not ctx.inbound.reply_id
+        and bool(ctx.text.strip())
+        and (
+            intents.is_skip(ctx.text)
+            or intents.declines_to_share(ctx.text)
+        )
+    )
+
+    if expecting not in filled and not conversation.get_ctx(expecting):
+        # Bounded by attempts as well as by an explicit refusal. People decline
+        # in sentences a keyword list will never cover ("I'd rather not share
+        # that"), and asking the same question forever is worse than explaining
+        # once why we cannot proceed.
+        key = f"attempts:{expecting}"
+        attempts = int(conversation.get_ctx(key, 0)) + 1
+        conversation.set_ctx(key, attempts)
+
+        if declined or attempts > _MAX_SLOT_ATTEMPTS:
+            result = TurnResult()
+            result.add(
+                OutboundMessage(
+                    text=copy.POST_SALES_DETAILS_REQUIRED.format(
+                        missing=missing_labels(ctx)
+                    )
+                )
+            )
+            # Back to answering questions; nothing has been written, and the
+            # conversation stays open so they can still book later.
+            conversation.current_state = ConversationState.SUPPORT_QUERY
+            return result
+    else:
+        conversation.clear_ctx(f"attempts:{expecting}")
+
+    follow_up = next_question(ctx)
+    if follow_up is not None:
+        return follow_up
+    return await _create_lead(ctx, remarks=None)
+
+
 async def handle_ask_name(ctx: TurnContext) -> TurnResult:
     """Capture the user's name."""
     result = TurnResult()
     conversation = ctx.conversation
 
-    name = clean_name(ctx.text)
+    # Absorb first. "I am Meera, meera@x.com, 9812345678, Master Of Data
+    # Analytics" is one message answering four questions, and `clean_name` on
+    # the raw text would try to read the whole thing as a name. Absorption
+    # strips the email and number out before the name is looked for.
+    absorb_slots(ctx)
+
+    name = conversation.get_ctx(CTX_PENDING_NAME) or clean_name(ctx.text)
     attempts = int(conversation.get_ctx(CTX_NAME_ATTEMPTS, 0))
 
     if name is None:
@@ -89,10 +203,11 @@ async def handle_ask_name(ctx: TurnContext) -> TurnResult:
     ctx.user.name = name
     conversation.set_ctx(CTX_PENDING_NAME, name)
     conversation.clear_ctx(CTX_NAME_ATTEMPTS)
-    conversation.current_state = ConversationState.ASK_CALLBACK_TIME
 
-    result.add(OutboundMessage(text=ask_time_text(ctx, name)))
-    return result
+    follow_up = next_question(ctx)
+    if follow_up is not None:
+        return follow_up
+    return await _create_lead(ctx, remarks=None)
 
 
 async def handle_ask_callback_time(ctx: TurnContext) -> TurnResult:
@@ -133,6 +248,14 @@ async def handle_ask_callback_time(ctx: TurnContext) -> TurnResult:
             CTX_PENDING_TIME_RAW: ctx.text.strip()[:255],
         }
     )
+    # A message like "meera@x.com, tomorrow 4pm" carries more than a time.
+    absorb_slots(ctx)
+
+    # Anything still required is asked before the optional remarks question.
+    follow_up = next_question(ctx)
+    if follow_up is not None:
+        return follow_up
+
     conversation.current_state = ConversationState.ASK_REMARKS
 
     team = "counselor" if conversation.lead_type is not LeadType.POST_SALES else "support team"
@@ -215,6 +338,11 @@ async def _create_lead(ctx: TurnContext, *, remarks: str | None) -> TurnResult:
         preferred_time=preferred_time,
         preferred_time_raw=conversation.get_ctx(CTX_PENDING_TIME_RAW),
         remarks=remarks,
+        contact_phone=conversation.get_ctx(CTX_CONTACT_PHONE) or user.phone,
+        email=conversation.get_ctx(CTX_EMAIL),
+        enrolled_course=conversation.get_ctx(CTX_ENROLLED_COURSE),
+        profession=conversation.get_ctx(CTX_PROFILE),
+        issue_type=_issue_label(conversation),
     )
 
     when = (
@@ -230,7 +358,16 @@ async def _create_lead(ctx: TurnContext, *, remarks: str | None) -> TurnResult:
     result.add(
         OutboundMessage(
             text=template.format(
-                name=name or "there", phone=_format_phone(user.phone), when=when
+                name=name or "there",
+                # The number they asked to be called on, which is not always
+                # the one they are messaging from. Confirming the WhatsApp
+                # number back to someone who just gave a different one reads
+                # as though we ignored them - and it is the detail they would
+                # most want to check.
+                phone=_format_phone(
+                    str(conversation.get_ctx(CTX_CONTACT_PHONE) or user.phone)
+                ),
+                when=when,
             )
         )
     )
@@ -242,6 +379,12 @@ async def _create_lead(ctx: TurnContext, *, remarks: str | None) -> TurnResult:
     result.lead_id = lead.id
     result.close_conversation = True
     return result
+
+
+def _issue_label(conversation: object) -> str | None:
+    """Support menu choice as a human label, or None outside post-sales."""
+    topic = conversation.get_ctx(CTX_SUPPORT_TOPIC)  # type: ignore[attr-defined]
+    return copy.issue_label_for(str(topic)) if topic else None
 
 
 def _resume_state(ctx: TurnContext) -> ConversationState:

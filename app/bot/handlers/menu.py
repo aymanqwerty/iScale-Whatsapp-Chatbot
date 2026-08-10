@@ -47,7 +47,7 @@ async def handle_main_menu(ctx: TurnContext) -> TurnResult:
     if choice == copy.MENU_COURSES:
         conversation.current_state = ConversationState.COURSE_SELECTION
         conversation.lead_type = LeadType.PRE_SALES
-        result.add(copy.course_menu(ctx.deps.knowledge_base))
+        result.add(copy.course_menu())
         return result
 
     if choice == copy.MENU_ENROLLED:

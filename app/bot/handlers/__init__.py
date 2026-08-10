@@ -13,19 +13,25 @@ from app.bot.context import TurnContext
 from app.bot.handlers.callback import (
     handle_ask_callback,
     handle_ask_callback_time,
+    handle_ask_email,
+    handle_ask_enrolled_course,
     handle_ask_name,
+    handle_ask_phone,
     handle_ask_remarks,
     handle_confirm_reschedule,
     handle_end,
     handle_lead_created,
 )
 from app.bot.handlers.courses import (
+    handle_course_group,
     handle_course_qna,
     handle_course_selection,
     handle_general_qna,
 )
+from app.bot.handlers.discovery import handle_discovery
 from app.bot.handlers.menu import handle_main_menu, handle_start
 from app.bot.handlers.support import (
+    handle_enrollment_type,
     handle_post_sales,
     handle_support_callback,
     handle_support_query,
@@ -38,15 +44,21 @@ StateHandler = Callable[[TurnContext], Awaitable[TurnResult]]
 HANDLERS: dict[ConversationState, StateHandler] = {
     ConversationState.START: handle_start,
     ConversationState.MAIN_MENU: handle_main_menu,
+    ConversationState.COURSE_GROUP: handle_course_group,
     ConversationState.COURSE_SELECTION: handle_course_selection,
     ConversationState.COURSE_QNA: handle_course_qna,
     ConversationState.GENERAL_QNA: handle_general_qna,
+    ConversationState.DISCOVERY: handle_discovery,
+    ConversationState.ENROLLMENT_TYPE: handle_enrollment_type,
     ConversationState.POST_SALES: handle_post_sales,
     ConversationState.SUPPORT_QUERY: handle_support_query,
     ConversationState.SUPPORT_CALLBACK: handle_support_callback,
     ConversationState.CONFIRM_RESCHEDULE: handle_confirm_reschedule,
     ConversationState.ASK_CALLBACK: handle_ask_callback,
     ConversationState.ASK_NAME: handle_ask_name,
+    ConversationState.ASK_EMAIL: handle_ask_email,
+    ConversationState.ASK_ENROLLED_COURSE: handle_ask_enrolled_course,
+    ConversationState.ASK_PHONE: handle_ask_phone,
     ConversationState.ASK_CALLBACK_TIME: handle_ask_callback_time,
     ConversationState.ASK_REMARKS: handle_ask_remarks,
     ConversationState.LEAD_CREATED: handle_lead_created,

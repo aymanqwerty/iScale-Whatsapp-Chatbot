@@ -40,8 +40,24 @@ class Lead(TimestampMixin, Base):
     #: Denormalised so the sheet row and any CRM export stay correct even if the
     #: user later changes their name on a different conversation.
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: The WhatsApp sender id. Always present - it is how the message arrived.
     phone: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    #: The number the user actually wants to be called on. Usually the same as
+    #: `phone`, but kept separate: a counselor ringing the WhatsApp number when
+    #: the user asked for their office line is the kind of small failure that
+    #: loses a sale, and overwriting `phone` would lose the thread's identity.
+    contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: Post-sales only, and mandatory there - a support call is not booked
+    #: without it, because it is the only thing tying the request to an account.
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     interested_course: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Post-sales: which course they say they are enrolled in.
+    enrolled_course: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: What the user said they do ("final year B.Tech student"). Pre-sales
+    #: context so a counselor opens the call already knowing who they are.
+    profession: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Routing label from the support menu: Video Related, Technical Issue, Other.
+    issue_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     #: Resolved callback slot, stored as an absolute UTC instant.
     preferred_time: Mapped[datetime | None] = mapped_column(

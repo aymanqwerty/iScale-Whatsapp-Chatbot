@@ -259,6 +259,52 @@ def is_greeting(text: str) -> bool:
     return len(words) <= 3
 
 
+#: Ways people say they have not decided. Matched as substrings of the
+#: normalised text so "i'm not really sure tbh" lands as readily as "not sure".
+_UNDECIDED_PHRASES = (
+    "not sure", "no idea", "not decided", "havent decided", "have not decided",
+    "dont know", "do not know", "dunno", "confused", "help me choose",
+    "help me decide", "suggest me", "suggest something", "you decide",
+    "which one is better for me", "kuch bhi", "pata nahi", "samajh nahi",
+)
+
+
+#: Ways people refuse to hand over a detail. Separate from `is_negative`, which
+#: answers yes/no questions - "no thanks" declines an offer, whereas these
+#: decline to *share something*, which is the distinction that matters when a
+#: booking is gated on it.
+_DECLINE_PHRASES = (
+    "rather not", "would not like to", "wouldnt like to", "dont want to",
+    "do not want to", "not comfortable", "cant share", "cannot share",
+    "wont share", "will not share", "dont have", "do not have",
+    "not sharing", "why do you need", "is it necessary", "prefer not",
+)
+
+
+def declines_to_share(text: str) -> bool:
+    """Whether the user is refusing to give a detail we asked for."""
+    cleaned = normalize(text)
+    if not cleaned:
+        return False
+    if any(phrase in cleaned for phrase in _DECLINE_PHRASES):
+        return True
+    # A leading "no" is a refusal even when the rest is a polite sentence.
+    return cleaned.split()[0] in {"no", "nope", "nah"}
+
+
+def means_undecided(text: str) -> bool:
+    """Whether the user is saying they do not know which course they want.
+
+    Deliberately narrow. This routes into the discovery pitch, so a false
+    positive hijacks someone who actually asked a specific question - which is
+    why "which one" alone is not enough, but "which one is better for me" is.
+    """
+    cleaned = normalize(text)
+    if not cleaned:
+        return False
+    return any(phrase in cleaned for phrase in _UNDECIDED_PHRASES)
+
+
 def is_skip(text: str) -> bool:
     cleaned = normalize(text)
     if not cleaned or cleaned in {"-", "_"}:

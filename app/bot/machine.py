@@ -14,6 +14,7 @@ from app.bot.context import CTX_NUDGED, CTX_QNA_COUNT, TurnContext
 from app.bot.handlers import HANDLERS
 from app.bot.handlers.callback import describe_slot, start_reschedule
 from app.bot.handlers.common import start_callback_capture
+from app.bot.handlers.discovery import start_discovery
 from app.core.logging import get_logger
 from app.domain.enums import (
     CALLBACK_CAPTURE_STATES,
@@ -112,10 +113,10 @@ class ConversationMachine:
             text, course_selected=conversation.current_course is not None
         )
         if asks_for_catalogue and not in_capture:
-            conversation.current_state = ConversationState.COURSE_SELECTION
+            conversation.current_state = ConversationState.COURSE_GROUP
             conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
             result = TurnResult()
-            result.add(copy.course_menu(ctx.deps.knowledge_base))
+            result.add(copy.course_group_menu())
             return result
 
         # Checked before `wants_human`, which would otherwise start a fresh
@@ -182,19 +183,44 @@ class ConversationMachine:
 
         if reply_id == copy.MENU_COURSES:
             self._reset_flow(ctx)
+            conversation.current_state = ConversationState.COURSE_GROUP
+            conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
+            result = TurnResult()
+            result.add(copy.course_group_menu())
+            return result
+
+        if reply_id in (copy.GROUP_COHORT, copy.GROUP_ADVANCE):
+            group = reply_id.removeprefix(copy.GROUP_PREFIX)
             conversation.current_state = ConversationState.COURSE_SELECTION
             conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
             result = TurnResult()
-            result.add(copy.course_menu(ctx.deps.knowledge_base))
+            result.add(copy.course_group_submenu(ctx.deps.knowledge_base, group))
             return result
+
+        if reply_id == copy.COURSE_UNSURE:
+            return start_discovery(ctx)
 
         if reply_id == copy.MENU_ENROLLED:
             self._reset_flow(ctx)
+            conversation.current_state = ConversationState.ENROLLMENT_TYPE
+            # Left unset until they say free or paid: a free-course student is
+            # a pre-sales lead, so committing to POST_SALES here would misfile
+            # every one of them.
+            result = TurnResult()
+            result.add(copy.enrollment_type_menu())
+            return result
+
+        if reply_id == copy.ENROLLED_PAID:
             conversation.current_state = ConversationState.POST_SALES
             conversation.lead_type = LeadType.POST_SALES
             result = TurnResult()
             result.add(copy.support_menu())
             return result
+
+        if reply_id == copy.ENROLLED_FREE:
+            # No callback for free courses - but they have already shown intent,
+            # so they go into discovery rather than being turned away.
+            return start_discovery(ctx, opener=copy.FREE_COURSE_NO_SUPPORT)
 
         if reply_id == copy.MENU_COUNSELOR:
             lead_type = conversation.lead_type or LeadType.PRE_SALES

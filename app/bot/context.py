@@ -32,6 +32,17 @@ CTX_PENDING_DATE = "pending_date"
 #: the same person twice with two different times.
 CTX_RESCHEDULE_LEAD_ID = "reschedule_lead_id"
 
+#: What the person has told us about themselves ("final year B.Tech student").
+#: Fed back into every prompt so the bot stops re-asking, and written to the
+#: lead so a counselor opens the call already knowing who they are calling.
+CTX_PROFILE = "profile"
+
+#: Post-sales capture slots. A paid student's callback is only written once
+#: name, email and enrolled course are all present - these hold them until then.
+CTX_EMAIL = "email"
+CTX_ENROLLED_COURSE = "enrolled_course"
+CTX_CONTACT_PHONE = "contact_phone"
+
 
 @dataclass(frozen=True, slots=True)
 class BotDependencies:

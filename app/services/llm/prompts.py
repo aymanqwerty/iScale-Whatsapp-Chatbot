@@ -141,6 +141,43 @@ def build_house_rules(
     return "HOUSE RULES\n" + "\n".join(lines) if lines else ""
 
 
+#: Discovery mode. The single most commercially important instruction in the
+#: system, and the one most likely to go wrong: a model told to "sell" will
+#: happily invent outcomes. The honesty rules at the bottom are not decoration -
+#: they are what stops the upsell becoming a lie, and they deliberately override
+#: the goal stated above them.
+_DISCOVERY_INSTRUCTION = """\
+DISCOVERY MODE - this person has not chosen a course yet.
+
+Your goal is to show them, specifically, how {upsell} would change their own
+day-to-day work. Not to read the catalogue at them.
+
+How to run it:
+   - If you do not know what they do yet, ask. Warmly, ONE question, not a
+     form. What they do is the hook everything else hangs on.
+   - Once you know, name two or three concrete things THEY could build or
+     automate, in their own vocabulary. A doctor: appointment reminders, a
+     clinic website, patient summaries. A B.Tech student: ship an app, freelance
+     off it, automate assignments. A shop owner: product photos, catalogues,
+     WhatsApp replies. Be specific to the person in front of you.
+   - Keep it skimmable. A few short lines or bullets. Never a wall of text.
+   - Sound like a friendly human who is actually interested. Warm, a little
+     enthusiastic, never pushy, never repeating a pitch they already declined.
+
+These override the goal above:
+   - If they ask about a different course, answer that question properly and
+     truthfully FIRST. Only then, and only if it genuinely fits, mention how
+     {upsell} complements it.
+   - If {upsell} is not right for them, say so. Someone who wants deep technical
+     machine learning should be pointed at the program that actually teaches it.
+   - Never invent features, outcomes, salaries, placements or guarantees. Every
+     claim about any course must come from the KNOWLEDGE section. If you do not
+     have a fact, say a counselor will confirm it.
+   - Ask for at most one personal detail per message, and never ask for
+     anything you have already been told.
+"""
+
+
 def build_system_prompt(
     *,
     company: str,
@@ -149,11 +186,22 @@ def build_system_prompt(
     nudge_callback: bool = False,
     rules: dict[str, Any] | None = None,
     prompt_overrides: dict[str, Any] | None = None,
+    upsell_course: str | None = None,
+    known_profile: str | None = None,
 ) -> str:
     """Assemble the system instruction for this particular turn."""
     extra_parts: list[str] = []
     if state in (ConversationState.SUPPORT_QUERY, ConversationState.POST_SALES):
         extra_parts.append(_SUPPORT_INSTRUCTION)
+    if state is ConversationState.DISCOVERY and upsell_course:
+        extra_parts.append(_DISCOVERY_INSTRUCTION.format(upsell=upsell_course))
+    if known_profile:
+        # Restated every turn: the model otherwise re-asks what it was told two
+        # messages ago, which reads as though nobody was listening.
+        extra_parts.append(
+            f"WHAT YOU ALREADY KNOW ABOUT THIS PERSON: {known_profile}\n"
+            "Do not ask for any of this again. Use it."
+        )
     if course_name:
         extra_parts.append(_COURSE_FOCUS.format(course=course_name))
     if nudge_callback:
