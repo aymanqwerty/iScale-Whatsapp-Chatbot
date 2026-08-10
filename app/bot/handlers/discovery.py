@@ -82,11 +82,17 @@ async def handle_discovery(ctx: TurnContext) -> TurnResult:
     upsell = knowledge_base.upsell_course
     if named is not None:
         conversation.current_course = named.slug
-        scope = named.slug
-    else:
-        scope = upsell.slug if upsell else None
+    elif upsell is not None and not conversation.current_course:
+        # Persisted on the conversation, not just used for this call. Handlers
+        # outside discovery (ASK_CALLBACK, for one) scope retrieval by
+        # `current_course`, so leaving it unset meant a follow-up question like
+        # "what is the fees" was answered with no course in scope at all - and
+        # the model, finding no price in what it was given, said it could not
+        # confirm one. The fee is in the knowledge base; it simply never
+        # reached the prompt.
+        conversation.current_course = upsell.slug
 
-    answer = await answer_question(ctx, course_slug=scope)
+    answer = await answer_question(ctx, course_slug=conversation.current_course)
 
     result = TurnResult()
     result.add(OutboundMessage(text=answer))

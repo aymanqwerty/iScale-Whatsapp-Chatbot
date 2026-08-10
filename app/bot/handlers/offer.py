@@ -84,6 +84,11 @@ def maybe_offer(ctx: TurnContext, *, force: bool = False) -> TurnResult | None:
         return None
 
     conversation.set_ctx(CTX_OFFER_SENT, True)
+    # The offer already carries a "Talk to a Counselor" button, so it *is* the
+    # callback nudge. Without consuming it here, the plain "shall a counselor
+    # call you?" fired on the very next message - two escalation prompts back to
+    # back, which reads as nagging.
+    ctx.mark_nudged()
     logger.info(
         "Discount offer shown",
         extra={"state": str(conversation.current_state), "forced": force},

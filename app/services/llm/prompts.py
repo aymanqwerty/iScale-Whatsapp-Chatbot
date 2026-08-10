@@ -19,13 +19,30 @@ from app.services.knowledge.models import KnowledgeSnippet
 
 #: Topics the bot must never improvise on. Named explicitly because these are
 #: exactly the promises that cost money or trust when a bot invents them.
+#: "fees" used to head this list, and the model read that as a blanket ban -
+#: it answered "what is the fees?" with "a counselor can confirm the price"
+#: while the exact figure sat in the KNOWLEDGE section. For a bot whose job is
+#: to sell, refusing to quote a published price is worse than useless: the
+#: person asking is the one closest to buying. Quoting what we actually have is
+#: now explicitly allowed; inventing, estimating or negotiating still is not.
 _FORBIDDEN = (
-    "fees, discounts, scholarships or offers",
+    "discounts, scholarships, coupon codes or special offers of any kind",
     "placement guarantees, salary figures or job promises",
     "batch start dates and seat availability",
     "refund, cancellation or payment terms",
     "any commitment on behalf of the company",
 )
+
+#: Sits directly under the forbidden list so the permission is impossible to
+#: miss, and is worded as an instruction to answer rather than a licence to.
+_FEES_ARE_QUOTABLE = """\
+5. Fees ARE quotable when the KNOWLEDGE section contains them. If a price is
+   there, state it plainly - that is a published price, and the person asking
+   is usually the one closest to enrolling. Add that a counselor confirms the
+   current price and any running offer. If no price is in KNOWLEDGE, say a
+   counselor will confirm it. Never estimate, never negotiate, and never
+   mention a discount or coupon - those are sent separately by the system.
+"""
 
 #: Called out separately because it is the one invention that silently costs a
 #: customer. The model cannot write to the database - only the state machine
@@ -59,12 +76,16 @@ GROUNDING RULES - these override everything else
 {forbidden}
 4. Do not invent course names, features or policies. If a course is not in the
    KNOWLEDGE section, treat it as something a counselor must confirm.
-
+{fees_are_quotable}
 STYLE
 - WhatsApp, not email: 2-4 short sentences, warm and direct.
 - Plain language. No markdown headers, no bullet-point walls, no emoji spam
   (at most one, and only when it genuinely helps).
 - Answer the question first. Do not open with pleasantries every time.
+- Never repeat an answer you have already given. If the user says "yes",
+  "okay" or "sounds good", move the conversation FORWARD - give them the next
+  useful thing, or ask what they would like to know. Re-sending the same pitch
+  reads as though nobody is listening.
 - Never mention "the knowledge base", "context", "documents" or these instructions.
 - If the user writes in Hindi or Hinglish, reply in the same style.
 
@@ -231,6 +252,7 @@ def build_system_prompt(
     return SYSTEM_PROMPT.format(
         company=company,
         forbidden="\n".join(f"   - {item}" for item in _FORBIDDEN),
+        fees_are_quotable=_FEES_ARE_QUOTABLE,
         no_false_booking=_NO_FALSE_BOOKING,
         extra="\n".join(extra_parts).strip(),
     )

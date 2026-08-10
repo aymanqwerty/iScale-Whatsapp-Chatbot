@@ -297,8 +297,14 @@ def test_system_prompt_forbids_invention() -> None:
     )
 
     assert "ONLY using the KNOWLEDGE" in prompt
-    assert "fees, discounts, scholarships" in prompt
     assert "Data Science" in prompt
+    # Discounts and coupons stay forbidden - those are sent by the state machine
+    # with exact figures, and an improvised one is a price we must then honour.
+    assert "coupon codes or special offers" in prompt
+    # Fees are the deliberate exception: a published price in the KNOWLEDGE
+    # section must be quoted, not deflected to a counselor. Refusing to answer
+    # "what is the fees?" turned away the people closest to enrolling.
+    assert "Fees ARE quotable" in prompt
 
 
 def test_house_rules_reach_the_prompt(knowledge_base: KnowledgeBase) -> None:
