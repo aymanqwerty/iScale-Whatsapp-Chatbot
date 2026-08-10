@@ -41,19 +41,26 @@ def offer_is_live(ctx: TurnContext) -> bool:
 
 
 def _relevant(ctx: TurnContext) -> bool:
-    """True when the discounted course is what this conversation is about.
+    """True only when the conversation is actually about the discounted course.
 
-    Discovery always qualifies - it exists to steer toward that course. A course
-    Q&A only qualifies when it is *that* course: dangling a discount on AI For
-    Everyone at someone reading about the ML program reads as a bait and switch.
+    The rule is the same everywhere: the offer needs `current_course` to be the
+    discounted course, or unset. Discovery is NOT a blanket exemption - a user
+    can steer discovery onto another course ("tell me about the ML program")
+    while the state stays DISCOVERY, and treating that as eligible dangled an
+    AI For Everyone coupon at someone reading about Machine Learning with
+    Agentic AI. That is the bait and switch this function exists to prevent.
     """
     conversation = ctx.conversation
     if conversation.lead_type is LeadType.POST_SALES:
         return False
-    if conversation.current_state is ConversationState.DISCOVERY:
-        return True
+
     slug = str(ctx.deps.knowledge_base.offer.get("course_slug", ""))
-    return conversation.current_course == slug
+    if conversation.current_course:
+        return conversation.current_course == slug
+
+    # No course chosen yet: only the discovery branch, which exists to steer
+    # toward the discounted course, may make the offer.
+    return conversation.current_state is ConversationState.DISCOVERY
 
 
 def maybe_offer(ctx: TurnContext, *, force: bool = False) -> TurnResult | None:
