@@ -4,129 +4,265 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="dark">
 <title>iScale Console</title>
 <style>
-  :root { --bg:#111b21; --panel:#202c33; --panel2:#2a3942; --accent:#00a884;
-          --text:#e9edef; --muted:#8696a0; --in:#202c33; --out:#005c4b; --agent:#0b4f6c;
-          --warn:#f0b232; --err:#f15c6d; --line:#222d34; }
-  * { box-sizing:border-box; }
-  html, body { height:100%; margin:0; }
-  body { background:var(--bg); color:var(--text); display:flex;
-         font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  :root{
+    --bg:#0a0c10; --panel:#0e1218; --panel2:#12171f; --raised:#161c25;
+    --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.045);
+    --text:#e7ecf3; --muted:#8b96a5; --faint:#5c6673;
+    --accent:#10b981; --accent-soft:rgba(16,185,129,.14);
+    --amber:#f0b232; --err:#f87171;
+    --in:#171d26; --out:#0d5c46; --agent:#1d4ed8;
+    --sidebar:352px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg); color:var(--text); display:flex; overflow:hidden;
+    font:400 15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:9px;
+                            border:2px solid transparent;background-clip:content-box;}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.18);background-clip:content-box;}
+  ::-webkit-scrollbar-track{background:transparent;}
 
-  /* ---- left: conversation list ---- */
-  aside { width:340px; min-width:280px; border-right:1px solid var(--line);
-          display:flex; flex-direction:column; background:var(--panel); }
-  .brand { padding:14px 16px; border-bottom:1px solid var(--line); display:flex;
-           align-items:center; justify-content:space-between; gap:8px; }
-  .brand strong { font-size:15px; }
-  .brand button { background:none; border:0; color:var(--muted); cursor:pointer; font-size:13px; }
-  .brand button:hover { color:var(--text); }
-  #search { margin:10px; padding:9px 12px; border-radius:8px; border:1px solid var(--panel2);
-            background:var(--panel2); color:var(--text); font-size:14px; }
-  #search:focus { outline:2px solid var(--accent); outline-offset:1px; }
-  #list { flex:1; overflow-y:auto; }
-  .row { padding:11px 16px; border-bottom:1px solid var(--line); cursor:pointer; display:block;
-         width:100%; text-align:left; background:none; border-left:3px solid transparent; color:inherit; }
-  .row:hover { background:#182229; }
-  .row.active { background:#2a3942; border-left-color:var(--accent); }
-  .row .top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
-  .row .who { font-weight:600; font-size:14px; }
-  .row .num { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
-  .row .when { color:var(--muted); font-size:11px; white-space:nowrap; }
-  .row .prev { color:var(--muted); font-size:13px; margin-top:2px;
-               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pill { font-size:10px; padding:1px 7px; border-radius:99px; background:var(--warn);
-          color:#3b2a00; font-weight:700; margin-left:6px; }
+  /* ===================== sidebar ===================== */
+  aside{
+    width:var(--sidebar); min-width:280px; flex-shrink:0;
+    background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column;
+  }
+  .brand{display:flex;align-items:center;gap:11px;padding:15px 16px 14px;
+         border-bottom:1px solid var(--line);}
+  .mark{
+    width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;
+    background:linear-gradient(145deg,#16d69a,#0b7f5f);color:#04231a;
+    font-weight:800;font-size:13px;letter-spacing:-.02em;
+    box-shadow:0 6px 16px -8px rgba(16,185,129,.8);
+  }
+  .brand .t{flex:1;min-width:0;}
+  .brand .t b{display:block;font-size:14px;font-weight:650;letter-spacing:-.01em;}
+  .brand .t span{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
+       box-shadow:0 0 0 3px rgba(16,185,129,.16);transition:background .2s,box-shadow .2s;}
+  .dot.off{background:var(--amber);box-shadow:0 0 0 3px rgba(240,178,50,.16);}
+  .icon{
+    width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
+    background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .icon:hover{background:var(--raised);color:var(--text);border-color:rgba(255,255,255,.13);}
 
-  /* ---- right: thread ---- */
-  main { flex:1; display:flex; flex-direction:column; min-width:0; }
-  header { padding:12px 18px; border-bottom:1px solid var(--line); background:var(--panel);
-           display:flex; align-items:center; gap:12px; }
-  header .who { font-weight:600; }
-  header .sub { color:var(--muted); font-size:12px; }
-  header .spacer { flex:1; }
-  .btn { border:0; border-radius:8px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; }
-  .btn.take { background:var(--warn); color:#3b2a00; }
-  .btn.give { background:var(--accent); color:#04231a; }
-  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .searchwrap{padding:12px 12px 10px;position:relative;}
+  .searchwrap svg{position:absolute;left:24px;top:50%;transform:translateY(-50%);
+                  color:var(--faint);pointer-events:none;}
+  #search{
+    width:100%;padding:10px 12px 10px 36px;border-radius:10px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:14px;
+    transition:border-color .16s,box-shadow .16s;
+  }
+  #search::placeholder{color:#4d5763;}
+  #search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3.5px var(--accent-soft);}
 
-  #thread { flex:1; overflow-y:auto; padding:20px 18px; display:flex; flex-direction:column; gap:8px;
-            background:#0b141a; }
-  .msg { max-width:min(74%,620px); padding:8px 11px; border-radius:9px; font-size:14px;
-         white-space:pre-wrap; word-wrap:break-word; }
-  .msg .meta { display:block; font-size:10px; color:var(--muted); margin-top:4px; text-align:right; }
-  .USER  { align-self:flex-start; background:var(--in); }
-  .BOT   { align-self:flex-end;   background:var(--out); }
-  .AGENT { align-self:flex-end;   background:var(--agent); }
-  .SYSTEM{ align-self:center; background:transparent; color:var(--muted); font-size:12px; font-style:italic; }
-  .tag { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
-         display:block; margin-bottom:2px; }
+  #list{flex:1;overflow-y:auto;padding:0 8px 12px;}
+  .row{
+    display:flex;gap:11px;width:100%;padding:11px 10px;margin-bottom:2px;
+    border:0;border-radius:11px;background:transparent;color:inherit;text-align:left;
+    cursor:pointer;align-items:flex-start;transition:background .13s;
+  }
+  .row:hover{background:var(--panel2);}
+  .row.active{background:var(--raised);box-shadow:inset 0 0 0 1px var(--line);}
+  .av{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;
+      font-size:13.5px;font-weight:650;color:#fff;letter-spacing:-.01em;}
+  .rbody{flex:1;min-width:0;}
+  .rtop{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+  .rname{font-size:14px;font-weight:600;letter-spacing:-.01em;
+         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rtime{font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;}
+  .rnum{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:1px;}
+  .rprev{font-size:12.5px;color:var(--faint);margin-top:3px;
+         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .badge{display:inline-flex;align-items:center;margin-left:6px;padding:1px 7px;
+         border-radius:99px;background:rgba(240,178,50,.15);color:var(--amber);
+         font-size:9.5px;font-weight:700;letter-spacing:.05em;vertical-align:middle;}
 
-  footer { border-top:1px solid var(--line); background:var(--panel); padding:12px 16px; }
-  .composer { display:flex; gap:10px; }
-  #text { flex:1; padding:11px 14px; border-radius:20px; border:1px solid var(--panel2);
-          background:var(--panel2); color:var(--text); font-size:14px; resize:none; max-height:120px; }
-  #text:focus { outline:2px solid var(--accent); outline-offset:1px; }
-  #send { border-radius:20px; padding:0 22px; }
-  .note { color:var(--muted); font-size:12px; padding:2px 2px 8px; }
-  .note.bad { color:var(--warn); }
-  .empty { margin:auto; color:var(--muted); text-align:center; }
+  /* ===================== skeletons ===================== */
+  .sk{background:linear-gradient(90deg,rgba(255,255,255,.045) 25%,
+                                        rgba(255,255,255,.09) 37%,
+                                        rgba(255,255,255,.045) 63%);
+      background-size:400% 100%;animation:sh 1.3s ease-in-out infinite;border-radius:6px;}
+  @keyframes sh{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+  .sk.circle{border-radius:50%;}
+  .skrow{display:flex;gap:11px;padding:11px 10px;align-items:flex-start;}
+
+  /* ===================== thread ===================== */
+  main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  header{display:flex;align-items:center;gap:12px;padding:12px 20px;
+         background:var(--panel);border-bottom:1px solid var(--line);min-height:65px;}
+  header .hname{font-size:15px;font-weight:650;letter-spacing:-.01em;}
+  header .hsub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:1px;}
+  .spacer{flex:1;}
+  .btn{border:0;border-radius:10px;padding:9px 15px;font-size:13px;font-weight:650;
+       cursor:pointer;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:7px;
+       transition:transform .1s ease,filter .16s,opacity .16s;white-space:nowrap;}
+  .btn:hover:not(:disabled){filter:brightness(1.08);}
+  .btn:active:not(:disabled){transform:translateY(1px);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn.take{background:linear-gradient(180deg,#f5bd47,#e0a11f);color:#3b2a00;}
+  .btn.give{background:linear-gradient(180deg,#14c98d,#0d9c6d);color:#04231a;}
+
+  #thread{flex:1;overflow-y:auto;padding:22px 20px 8px;display:flex;flex-direction:column;gap:3px;
+          background:radial-gradient(760px 420px at 50% -12%,rgba(56,120,255,.045),transparent 62%),
+                     var(--bg);
+          scroll-behavior:smooth;}
+  .msg{max-width:min(70%,600px);padding:9px 12px 7px;border-radius:14px;font-size:14.2px;
+       line-height:1.48;white-space:pre-wrap;overflow-wrap:anywhere;
+       animation:pop .18s ease-out;box-shadow:0 1px 2px rgba(0,0,0,.28);}
+  @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.99);}to{opacity:1;transform:none;}}
+  .msg .meta{display:block;font-size:10px;color:rgba(255,255,255,.42);margin-top:4px;
+             text-align:right;font-variant-numeric:tabular-nums;}
+  .msg .who{display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;
+            text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:3px;}
+  .USER{align-self:flex-start;background:var(--in);border-bottom-left-radius:5px;}
+  .BOT{align-self:flex-end;background:var(--out);border-bottom-right-radius:5px;}
+  .AGENT{align-self:flex-end;background:var(--agent);border-bottom-right-radius:5px;}
+  .SYSTEM{align-self:center;background:transparent;color:var(--faint);font-size:12px;
+          font-style:italic;box-shadow:none;max-width:80%;text-align:center;}
+  .msg.pending{opacity:.6;}
+  .msg.failed{background:#5b1d1d;}
+  .msg.failed .meta{color:#fca5a5;}
+  .daysep{align-self:center;margin:12px 0 6px;padding:3px 12px;border-radius:99px;
+          background:var(--panel2);color:var(--faint);font-size:11px;font-weight:600;
+          box-shadow:inset 0 0 0 1px var(--line2);}
+
+  footer{background:var(--panel);border-top:1px solid var(--line);padding:11px 20px 14px;}
+  .note{font-size:12px;color:var(--muted);margin-bottom:9px;}
+  .note.warn{color:var(--amber);}
+  .composer{display:flex;gap:10px;align-items:flex-end;}
+  #text{flex:1;padding:11px 15px;border-radius:14px;border:1px solid var(--line);
+        background:var(--panel2);color:var(--text);font-size:14.2px;line-height:1.45;
+        resize:none;max-height:132px;min-height:44px;
+        transition:border-color .16s,box-shadow .16s,opacity .16s;}
+  #text::placeholder{color:#4d5763;}
+  #text:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3.5px var(--accent-soft);}
+  #text:disabled{opacity:.45;cursor:not-allowed;}
+  #send{border-radius:14px;padding:0 18px;height:44px;}
+
+  .empty{margin:auto;text-align:center;color:var(--faint);max-width:300px;}
+  .empty .big{width:56px;height:56px;border-radius:16px;margin:0 auto 16px;
+              display:grid;place-items:center;background:var(--panel2);
+              box-shadow:inset 0 0 0 1px var(--line);}
+  .empty h3{margin:0 0 6px;font-size:15px;font-weight:600;color:var(--muted);letter-spacing:-.01em;}
+  .empty p{margin:0;font-size:13px;line-height:1.5;}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+         background:var(--raised);color:var(--text);padding:10px 16px;border-radius:11px;
+         font-size:13px;box-shadow:0 16px 40px -12px rgba(0,0,0,.9),inset 0 0 0 1px var(--line);
+         opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;}
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+
+  .backbtn{display:none;}
+  @media (max-width:820px){
+    :root{--sidebar:100%;}
+    aside{position:absolute;inset:0;z-index:20;}
+    body.viewing aside{display:none;}
+    .backbtn{display:grid;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important;transition:none !important;scroll-behavior:auto !important;}
+  }
 </style>
 </head>
 <body>
 
 <aside>
   <div class="brand">
-    <strong>Conversations</strong>
-    <button id="signout" type="button">Sign out</button>
+    <div class="mark">iS</div>
+    <div class="t">
+      <b>Console</b>
+      <span><i class="dot" id="dot"></i><span id="conn">Live</span></span>
+    </div>
+    <button class="icon" id="signout" type="button" title="Sign out" aria-label="Sign out">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
   </div>
-  <input id="search" placeholder="Search number or name" autocomplete="off">
+
+  <div class="searchwrap">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.2" stroke-linecap="round">
+      <circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>
+    </svg>
+    <input id="search" placeholder="Search name or number" autocomplete="off" spellcheck="false">
+  </div>
+
   <div id="list"></div>
 </aside>
 
 <main>
   <header id="head" hidden>
+    <button class="icon backbtn" id="back" type="button" aria-label="Back to list">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+    </button>
+    <div class="av" id="hAv"></div>
     <div>
-      <div class="who" id="hWho"></div>
-      <div class="sub" id="hSub"></div>
+      <div class="hname" id="hWho"></div>
+      <div class="hsub" id="hSub"></div>
     </div>
     <div class="spacer"></div>
     <button class="btn take" id="toggle" type="button"></button>
   </header>
 
-  <div id="thread"><div class="empty">Select a conversation</div></div>
+  <div id="thread">
+    <div class="empty">
+      <div class="big">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5c6673"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 20.5l1.6-4.9A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/>
+        </svg>
+      </div>
+      <h3>No conversation selected</h3>
+      <p>Pick a number on the left to read the thread and take it over.</p>
+    </div>
+  </div>
 
   <footer id="foot" hidden>
     <div class="note" id="note"></div>
     <div class="composer">
-      <textarea id="text" rows="1" placeholder="Type a message"></textarea>
-      <button class="btn give" id="send" type="button">Send</button>
+      <textarea id="text" rows="1" placeholder="Type a message" disabled></textarea>
+      <button class="btn give" id="send" type="button" disabled>Send</button>
     </div>
   </footer>
 </main>
 
+<div class="toast" id="toast"></div>
+
 <script>
 const API = '/api/v1/console/api';
-let current = null;       // phone in view
-let lastId = 0;           // highest message id rendered, for incremental fetching
-let paused = false;
-let canReply = false;
-let convos = [];
-
-// Every message id already on screen. This is the guarantee that a message can
-// never be drawn twice: two overlapping responses can carry the same rows, and
-// checking the id at render time makes duplication structurally impossible
-// rather than merely unlikely.
-let seen = new Set();
-
-// Only one fetch in flight at a time. The original bug: a poll every 2s against
-// a server taking longer than 2s meant the second request left with the same
-// `after_id` as the first, so both returned the same messages and both appended
-// them. The slower the server, the more copies.
-let fetching = false;
-
 const $ = (id) => document.getElementById(id);
+
+let current = null, paused = false, canReply = false, convos = [], listLoaded = false;
+let fetching = false, socket = null, retry = 1000, tempSeq = -1;
+
+// Per-conversation cache. Re-opening a thread then paints instantly from memory
+// while the delta fetch runs behind it, so the pane is never blank while the
+// network works. Nothing about the transport changed - this is perceived speed.
+const cache = new Map();   // phone -> {msgs, lastId, seen}
+
+function state(phone) {
+  if (!cache.has(phone)) cache.set(phone, { msgs: [], lastId: 0, seen: new Set() });
+  return cache.get(phone);
+}
 
 async function api(path, options) {
   const r = await fetch(API + path, options);
@@ -134,224 +270,394 @@ async function api(path, options) {
   return r;
 }
 
+/* ---------------- formatting ---------------- */
+function prettyPhone(p) {
+  const d = String(p).replace(/[^0-9]/g, '');
+  if (d.length === 12 && d.startsWith('91')) return '+91 ' + d.slice(2, 7) + ' ' + d.slice(7);
+  return '+' + d;
+}
 function timeAgo(iso) {
   if (!iso) return '';
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
   if (s < 60) return 'now';
   if (s < 3600) return Math.floor(s / 60) + 'm';
   if (s < 86400) return Math.floor(s / 3600) + 'h';
-  return Math.floor(s / 86400) + 'd';
+  if (s < 604800) return Math.floor(s / 86400) + 'd';
+  return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
-
-function prettyPhone(p) {
-  const d = String(p).replace(/\D/g, '');
-  if (d.length === 12 && d.startsWith('91')) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
-  return '+' + d;
-}
-
 function clock(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+function dayLabel(iso) {
+  const d = new Date(iso), today = new Date();
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(d, today)) return 'Today';
+  const y = new Date(today); y.setDate(today.getDate() - 1);
+  if (same(d, y)) return 'Yesterday';
+  return d.toLocaleDateString([], { day: 'numeric', month: 'long' });
+}
+function initials(name, phone) {
+  const n = (name || '').trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    const first = parts[0][0] || '';
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase();
+  }
+  return String(phone).replace(/[^0-9]/g, '').slice(-2);
+}
+// Deterministic colour per number: the same person keeps the same avatar across
+// reloads, so staff start recognising threads without reading them.
+function hue(phone) {
+  let h = 0;
+  for (const c of String(phone)) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
+}
+function paintAvatar(el, name, phone) {
+  el.textContent = initials(name, phone);
+  const h = hue(phone);
+  el.style.background =
+    'linear-gradient(145deg,hsl(' + h + ' 55% 46%),hsl(' + ((h + 38) % 360) + ' 58% 34%))';
+}
 
-// textContent everywhere, never innerHTML with message data: a customer can put
+/* ---------------- skeletons ---------------- */
+function listSkeleton(n) {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < (n || 7); i++) {
+    const row = document.createElement('div'); row.className = 'skrow';
+    const av = document.createElement('div'); av.className = 'sk circle';
+    av.style.cssText = 'width:40px;height:40px;flex-shrink:0';
+    const body = document.createElement('div'); body.style.flex = '1';
+    const a = document.createElement('div'); a.className = 'sk';
+    a.style.cssText = 'height:11px;width:' + (45 + Math.random() * 30) + '%';
+    const b = document.createElement('div'); b.className = 'sk';
+    b.style.cssText = 'height:9px;width:38%;margin-top:7px';
+    const c = document.createElement('div'); c.className = 'sk';
+    c.style.cssText = 'height:9px;width:' + (60 + Math.random() * 28) + '%;margin-top:7px';
+    body.append(a, b, c); row.append(av, body); frag.appendChild(row);
+  }
+  return frag;
+}
+function threadSkeleton() {
+  const frag = document.createDocumentFragment();
+  [46, 62, 38, 70, 52].forEach((w, i) => {
+    const b = document.createElement('div'); b.className = 'sk';
+    b.style.cssText = 'height:' + (34 + (i % 2) * 16) + 'px;width:' + w + '%;' +
+                      'border-radius:14px;margin-bottom:9px;align-self:' +
+                      (i % 2 ? 'flex-end' : 'flex-start');
+    frag.appendChild(b);
+  });
+  return frag;
+}
+
+/* ---------------- conversation list ---------------- */
+// textContent throughout, never innerHTML with message data: a customer can put
 // anything in a WhatsApp message, and this page is where staff read it.
 function renderList() {
   const q = $('search').value.trim().toLowerCase();
   const list = $('list');
+  const rows = convos.filter(
+    (c) => !q || c.phone.includes(q) || (c.name || '').toLowerCase().includes(q)
+  );
   list.replaceChildren();
-  convos
-    .filter(c => !q || c.phone.includes(q) || (c.name || '').toLowerCase().includes(q))
-    .forEach(c => {
-      const row = document.createElement('button');
-      row.className = 'row' + (c.phone === current ? ' active' : '');
-      row.type = 'button';
 
-      const top = document.createElement('div'); top.className = 'top';
-      const who = document.createElement('span'); who.className = 'who';
-      who.textContent = c.name || 'Unknown';
-      if (c.bot_paused) {
-        const pill = document.createElement('span');
-        pill.className = 'pill'; pill.textContent = 'YOU';
-        who.appendChild(pill);
-      }
-      const when = document.createElement('span');
-      when.className = 'when'; when.textContent = timeAgo(c.last_activity);
-      top.append(who, when);
+  if (!rows.length) {
+    const e = document.createElement('div');
+    e.style.cssText = 'padding:34px 18px;text-align:center;color:var(--faint);font-size:13px';
+    e.textContent = q ? 'No matches.' : 'No conversations yet.';
+    list.appendChild(e);
+    return;
+  }
 
-      // Name and number both: staff recognise regulars by name, but the number
-      // is what they cross-check against the leads sheet.
-      const num = document.createElement('div'); num.className = 'num';
-      num.textContent = prettyPhone(c.phone);
+  rows.forEach((c) => {
+    const row = document.createElement('button');
+    row.className = 'row' + (c.phone === current ? ' active' : '');
+    row.type = 'button';
 
-      const prev = document.createElement('div'); prev.className = 'prev';
-      prev.textContent = (c.last_sender === 'USER' ? '' : '↩ ') + (c.last_message || '');
+    const av = document.createElement('div'); av.className = 'av';
+    paintAvatar(av, c.name, c.phone);
 
-      row.append(top, num, prev);
-      row.addEventListener('click', () => open(c.phone));
-      list.appendChild(row);
-    });
+    const body = document.createElement('div'); body.className = 'rbody';
+    const top = document.createElement('div'); top.className = 'rtop';
+    const name = document.createElement('span'); name.className = 'rname';
+    name.textContent = c.name || 'Unknown';
+    if (c.bot_paused) {
+      const badge = document.createElement('span');
+      badge.className = 'badge'; badge.textContent = 'YOU';
+      name.appendChild(badge);
+    }
+    const when = document.createElement('span'); when.className = 'rtime';
+    when.textContent = timeAgo(c.last_activity);
+    top.append(name, when);
+
+    const num = document.createElement('div'); num.className = 'rnum';
+    num.textContent = prettyPhone(c.phone);
+    const prev = document.createElement('div'); prev.className = 'rprev';
+    prev.textContent = (c.last_sender === 'USER' ? '' : '↩ ') + (c.last_message || '');
+
+    body.append(top, num, prev);
+    row.append(av, body);
+    row.addEventListener('click', () => open(c.phone));
+    list.appendChild(row);
+  });
 }
 
 async function loadConversations() {
-  const r = await api('/conversations');
-  convos = (await r.json()).conversations;
-  renderList();
-}
-
-function renderMessages(messages, replace) {
-  const thread = $('thread');
-  if (replace) { thread.replaceChildren(); seen = new Set(); }
-  let added = 0;
-  messages.forEach(m => {
-    if (seen.has(m.id)) return;   // already drawn - never draw it again
-    seen.add(m.id);
-    added++;
-    const el = document.createElement('div');
-    el.className = 'msg ' + m.sender;
-    if (m.sender === 'AGENT') {
-      const tag = document.createElement('span');
-      tag.className = 'tag'; tag.textContent = 'You';
-      el.appendChild(tag);
-    }
-    el.appendChild(document.createTextNode(m.text));
-    const meta = document.createElement('span');
-    meta.className = 'meta'; meta.textContent = clock(m.at);
-    el.appendChild(meta);
-    thread.appendChild(el);
-    lastId = Math.max(lastId, m.id);
-  });
-  if (added) thread.scrollTop = thread.scrollHeight;
-}
-
-function paintControls() {
-  $('toggle').textContent = paused ? 'Hand back to bot' : 'Take over from bot';
-  $('toggle').className = 'btn ' + (paused ? 'give' : 'take');
-  $('send').disabled = !paused || !canReply;
-  $('text').disabled = !paused || !canReply;
-  const note = $('note');
-  if (!paused) {
-    note.className = 'note';
-    note.textContent = 'The bot is handling this conversation. Take it over to reply yourself.';
-  } else if (!canReply) {
-    note.className = 'note bad';
-    note.textContent = 'Outside the 24-hour window — WhatsApp will not deliver a free-text reply until the customer messages again.';
-  } else {
-    note.className = 'note';
-    note.textContent = 'You are replying. The bot stays silent until you hand it back.';
+  if (!listLoaded) $('list').replaceChildren(listSkeleton());
+  try {
+    const r = await api('/conversations');
+    convos = (await r.json()).conversations;
+    listLoaded = true;
+    renderList();
+  } catch (err) {
+    if (!listLoaded) $('list').replaceChildren();
   }
 }
 
-async function open(phone) {
-  current = phone; lastId = 0;
-  $('head').hidden = false; $('foot').hidden = false;
-  $('thread').replaceChildren();
-  await poll(true);
-  renderList();
+/* ---------------- thread ---------------- */
+function bubble(m) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + m.sender + (m.pending ? ' pending' : '') + (m.failed ? ' failed' : '');
+  if (m.sender === 'AGENT') {
+    const who = document.createElement('span');
+    who.className = 'who'; who.textContent = 'You';
+    el.appendChild(who);
+  }
+  el.appendChild(document.createTextNode(m.text));
+  const meta = document.createElement('span'); meta.className = 'meta';
+  meta.textContent = m.failed ? 'Not delivered' : (m.pending ? 'Sending…' : clock(m.at));
+  el.appendChild(meta);
+  return el;
 }
 
-async function poll(replace) {
+function paintThread(phone) {
+  const st = state(phone), thread = $('thread');
+  thread.replaceChildren();
+  let lastDay = '';
+  st.msgs.forEach((m) => {
+    const day = m.at ? dayLabel(m.at) : '';
+    if (day && day !== lastDay) {
+      lastDay = day;
+      const sep = document.createElement('div');
+      sep.className = 'daysep'; sep.textContent = day;
+      thread.appendChild(sep);
+    }
+    thread.appendChild(bubble(m));
+  });
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function absorb(phone, messages) {
+  const st = state(phone);
+  let added = 0;
+  messages.forEach((m) => {
+    if (st.seen.has(m.id)) return;   // drawn already - never draw it twice
+    st.seen.add(m.id);
+    st.msgs.push(m);
+    st.lastId = Math.max(st.lastId, m.id);
+    added++;
+  });
+  return added;
+}
+
+async function open(phone) {
+  current = phone;
+  document.body.classList.add('viewing');
+  $('head').hidden = false;
+  $('foot').hidden = false;
+  renderList();
+
+  const c = convos.find((x) => x.phone === phone);
+  paintAvatar($('hAv'), c && c.name, phone);
+  $('hWho').textContent = (c && c.name) || 'Unknown';
+  $('hSub').textContent = prettyPhone(phone);
+  if (c) { paused = !!c.bot_paused; paintControls(); }
+
+  const st = state(phone);
+  if (st.msgs.length) paintThread(phone);               // instant, from cache
+  else $('thread').replaceChildren(threadSkeleton());   // first visit
+  await refresh(true);
+}
+
+async function refresh(full) {
   if (!current) return;
-  if (fetching && !replace) return;   // a request is already on its way
+  if (fetching && !full) return;
   fetching = true;
-  const phone = current;
+  const phone = current, st = state(phone);
   try {
-    const r = await api(`/messages/${encodeURIComponent(phone)}?after_id=${replace ? 0 : lastId}`);
+    const r = await api(
+      '/messages/' + encodeURIComponent(phone) + '?after_id=' + (full ? 0 : st.lastId)
+    );
     if (!r.ok) return;
     const d = await r.json();
-    // The user may have clicked another conversation while this was in flight.
-    if (phone !== current) return;
-    paused = d.bot_paused; canReply = d.can_reply;
+    if (phone !== current) return;   // switched conversation mid-flight
+    if (full) { st.msgs = []; st.seen = new Set(); st.lastId = 0; }
+    const added = absorb(phone, d.messages);
+    paused = d.bot_paused;
+    canReply = d.can_reply;
     $('hWho').textContent = d.name || 'Unknown';
     $('hSub').textContent = prettyPhone(d.phone);
-    renderMessages(d.messages, replace);
+    if (full || added) paintThread(phone);
     paintControls();
   } finally {
     fetching = false;
   }
 }
 
+function paintControls() {
+  const t = $('toggle');
+  t.textContent = paused ? 'Hand back to bot' : 'Take over from bot';
+  t.className = 'btn ' + (paused ? 'give' : 'take');
+
+  const usable = paused && canReply;
+  $('send').disabled = !usable;
+  $('text').disabled = !usable;
+
+  const note = $('note');
+  if (!paused) {
+    note.className = 'note';
+    note.textContent = 'The bot is handling this conversation. Take it over to reply yourself.';
+  } else if (!canReply) {
+    note.className = 'note warn';
+    note.textContent =
+      'Outside the 24-hour window — WhatsApp will not deliver a reply until the customer messages again.';
+  } else {
+    note.className = 'note';
+    note.textContent = 'You are replying. The bot stays silent until you hand it back.';
+  }
+}
+
+/* ---------------- actions, applied optimistically ---------------- */
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// Flip the UI first, confirm with the server after. This button used to wait on
+// a POST plus two follow-up fetches before anything moved, which is what made it
+// feel slow. A failure rolls the state back and says so.
 $('toggle').addEventListener('click', async () => {
   if (!current) return;
-  $('toggle').disabled = true;
-  await api('/handover', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: current, paused: !paused }),
-  });
-  $('toggle').disabled = false;
-  await poll(false);
-  await loadConversations();
+  const phone = current, want = !paused;
+  const row = convos.find((c) => c.phone === phone);
+
+  paused = want; paintControls();
+  if (row) { row.bot_paused = want; renderList(); }
+
+  try {
+    const r = await api('/handover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone, paused: want }),
+    });
+    if (!r.ok) throw new Error();
+    if (want && canReply) $('text').focus();
+  } catch (err) {
+    paused = !want; paintControls();
+    if (row) { row.bot_paused = !want; renderList(); }
+    toast('Could not change the handover. Try again.');
+  }
 });
 
 async function send() {
-  const text = $('text').value.trim();
+  const box = $('text'), text = box.value.trim();
   if (!text || !current) return;
-  $('send').disabled = true;
-  const r = await api('/send', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: current, text }),
-  });
-  if (r.ok) {
-    $('text').value = '';
-    await poll(false);
-  } else {
-    const body = await r.json().catch(() => ({}));
-    const note = $('note');
-    note.className = 'note bad';
-    note.textContent = body.detail || 'Could not send.';
+  const phone = current, st = state(phone);
+
+  // Draw it immediately, greyed out, then confirm. Waiting for the round trip
+  // made the composer feel broken on a slow connection.
+  const temp = {
+    tempId: tempSeq--, sender: 'AGENT', text: text,
+    at: new Date().toISOString(), pending: true,
+  };
+  st.msgs.push(temp);
+  paintThread(phone);
+  box.value = '';
+  box.style.height = 'auto';
+
+  try {
+    const r = await api('/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone, text: text }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.detail || 'Could not send.');
+    }
+    const saved = await r.json();
+    temp.pending = false;
+    temp.id = saved.id;
+    st.seen.add(saved.id);
+    st.lastId = Math.max(st.lastId, saved.id);
+    if (phone === current) paintThread(phone);
+    loadConversations().catch(() => {});
+  } catch (err) {
+    temp.pending = false;
+    temp.failed = true;
+    if (phone === current) paintThread(phone);
+    toast(err.message || 'Could not send.');
   }
-  $('send').disabled = false;
 }
 
 $('send').addEventListener('click', send);
 $('text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
+$('text').addEventListener('input', function () {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 132) + 'px';
+});
 $('search').addEventListener('input', renderList);
+$('back').addEventListener('click', () => document.body.classList.remove('viewing'));
 $('signout').addEventListener('click', async () => {
-  await api('/logout', { method: 'POST' });
+  try { await api('/logout', { method: 'POST' }); } catch (err) { /* leaving anyway */ }
   location.href = '/api/v1/console';
 });
 
-// ---- live updates -------------------------------------------------------
-// A WebSocket carries only a nudge ("this number has activity"), never message
-// content - the delta still comes through the authenticated endpoint, so the
-// socket can never become a second way to read customer data.
-//
-// Polling stays as a fallback at a slower cadence. A dropped socket then costs
-// a few seconds of latency instead of a dead page, which matters on a free
-// instance that sleeps.
-let socket = null;
-let retry = 1000;
+/* ---------------- live updates ---------------- */
+// The socket carries only a nudge ("this number has activity"), never message
+// content - the delta still comes through the authenticated endpoint. Polling
+// stays as a slower fallback, so a dropped socket costs latency, not a dead page.
+function setConn(live) {
+  $('dot').classList.toggle('off', !live);
+  $('conn').textContent = live ? 'Live' : 'Reconnecting…';
+}
 
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   try {
-    socket = new WebSocket(`${scheme}://${location.host}${API}/stream`);
-  } catch { return schedule(); }
-
-  socket.onopen = () => { retry = 1000; };
+    socket = new WebSocket(scheme + '://' + location.host + API + '/stream');
+  } catch (err) {
+    return schedule();
+  }
+  socket.onopen = () => { retry = 1000; setConn(true); };
   socket.onmessage = (ev) => {
     let msg;
-    try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.type !== 'activity') return;          // ping keepalive
-    if (msg.phone === current) poll(false).catch(() => {});
+    try { msg = JSON.parse(ev.data); } catch (err) { return; }
+    if (msg.type !== 'activity') return;          // keepalive ping
+    if (msg.phone === current) refresh(false).catch(() => {});
     loadConversations().catch(() => {});
   };
-  socket.onclose = schedule;
-  socket.onerror = () => { try { socket.close(); } catch {} };
+  socket.onclose = () => { setConn(false); schedule(); };
+  socket.onerror = () => { try { socket.close(); } catch (err) { /* already gone */ } };
 }
 
 function schedule() {
   socket = null;
   setTimeout(connect, retry);
-  retry = Math.min(retry * 2, 30000);   // back off, do not hammer a sleeping instance
+  retry = Math.min(retry * 2, 30000);   // back off; do not hammer a sleeping instance
 }
 
 loadConversations();
 connect();
-setInterval(() => poll(false).catch(() => {}), 4000);
+setInterval(() => refresh(false).catch(() => {}), 4000);
 setInterval(() => loadConversations().catch(() => {}), 20000);
+setInterval(renderList, 60000);   // keep the relative timestamps honest
 </script>
 </body>
 </html>
