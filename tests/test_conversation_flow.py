@@ -1235,3 +1235,36 @@ async def test_the_pitch_guidance_follows_the_course_not_just_discovery(
     system_prompt = harness.llm.calls[-1]["system_prompt"]
     assert "DISCOVERY MODE" in system_prompt, "no pitch guidance on the sell branch"
     assert "doctor" in system_prompt, "the profession was not remembered"
+
+
+async def test_a_price_question_closes_with_the_discount(harness: Harness) -> None:
+    """The question closest to a sale must not be answered at full price.
+
+    Observed: "how can i purchase it" got the list price and a counselor offer,
+    while a 32% coupon sat unused. Someone asking what it costs is ready to hear
+    the code.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.GROUP_COHORT)
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}ai-for-everyone")
+
+    replies = await harness.say("how much does it cost")
+
+    assert "BOT32" in harness.texts(replies)
+
+
+async def test_a_price_question_on_another_course_stays_full_price(
+    harness: Harness,
+) -> None:
+    """The closing trigger must not become a back door around exclusivity."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.GROUP_COHORT)
+    await harness.say(reply_id=f"{copy.COURSE_PREFIX}machine-learning-with-agentic-ai")
+
+    seen = ""
+    for message in ("how much does it cost", "what is the fees", "how do i buy it"):
+        seen += harness.texts(await harness.say(message))
+
+    assert "BOT32" not in seen
