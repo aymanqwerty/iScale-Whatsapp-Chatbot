@@ -314,14 +314,25 @@ def declines_to_share(text: str) -> bool:
 #: Explicit buying signals. Narrow on purpose: this short-circuits the usual
 #: "earn it over a few messages" pacing and shows the discount immediately, so a
 #: false positive means dangling a coupon at someone who was only browsing.
+#: Composed rather than enumerated. A fixed phrase list matched "i want to buy
+#: this course" and missed "i want to purchase this course" - the same sentence
+#: with a synonym. Any (intent verb) + (buy verb) pair now counts, in either
+#: order, which covers the forms nobody thought to write down.
+_BUY_INTENT = (
+    r"(?:want|wanna|wish|like|ready|how\s+(?:to|do\s+i|can\s+i)|"
+    r"i\s+will|i'?ll|lets|let's|can\s+i)"
+)
+_BUY_VERB = (
+    r"(?:buy|purchase|enroll|enrol|join|register|pay|paying|payment|"
+    r"take\s+(?:this|the|it)|get\s+(?:this|it)|subscribe|admission)"
+)
+_ENROL_RE = re.compile(rf"\b{_BUY_INTENT}\b[\w\s']{{0,20}}?\b{_BUY_VERB}\b")
+
 _ENROL_PHRASES = (
-    "how to join", "how do i join", "how can i join", "want to join",
-    "how to enroll", "how do i enroll", "how to enrol", "want to enroll",
-    "how to buy", "how do i buy", "want to buy", "how to purchase",
-    "how to pay", "how do i pay", "want to pay", "payment link",
-    "how to register", "want to register", "sign me up", "count me in",
-    "i want this course", "i want this program", "ready to join",
-    "kaise join", "kaise le", "kaise kharide",
+    "payment link", "sign me up", "count me in", "i want this course",
+    "i want this program", "ready to join", "where do i pay", "share the link",
+    "send me the link", "kaise join", "kaise le", "kaise kharide",
+    "kharidna hai", "lena hai", "join karna hai",
 )
 
 
@@ -330,7 +341,9 @@ def wants_to_enroll(text: str) -> bool:
     cleaned = normalize(text)
     if not cleaned:
         return False
-    return any(phrase in cleaned for phrase in _ENROL_PHRASES)
+    if any(phrase in cleaned for phrase in _ENROL_PHRASES):
+        return True
+    return bool(_ENROL_RE.search(cleaned))
 
 
 def means_undecided(text: str) -> bool:
