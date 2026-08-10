@@ -35,6 +35,9 @@ class AnswerRequest:
     audience: Audience = "all"
     history: tuple[ChatTurn, ...] = ()
     nudge_callback: bool = False
+    #: Free-text summary of what we already know about the person ("works as a
+    #: doctor"). Fed back into every prompt so the bot stops re-asking.
+    known_profile: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +87,7 @@ class AnswerService:
             audience=request.audience,
         )
 
+        upsell = self._kb.upsell_course
         system_prompt = build_system_prompt(
             company=self._kb.company_name,
             state=request.state,
@@ -91,6 +95,8 @@ class AnswerService:
             nudge_callback=request.nudge_callback,
             rules=self._kb.rules,
             prompt_overrides=self._kb.prompt_overrides,
+            upsell_course=upsell.name if upsell else None,
+            known_profile=request.known_profile,
         )
         user_prompt = build_user_prompt(request.question, snippets)
 

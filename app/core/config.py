@@ -118,7 +118,15 @@ class Settings(BaseSettings):
     # --- Google Sheets -----------------------------------------------------
     google_sheets_enabled: bool = False
     google_sheets_spreadsheet_id: str = ""
+    #: Legacy single-tab name. Kept so an existing deployment does not lose its
+    #: sheet on upgrade; new writes are routed to the two tabs below.
     google_sheets_worksheet_name: str = "Leads"
+    #: Leads are split by funnel side. The two sides carry different columns and
+    #: are worked by different teams, so one combined tab meant every counselor
+    #: scrolled past columns that were permanently blank for their half.
+    #: Created automatically if absent.
+    google_sheets_pre_sales_worksheet: str = "Pre Sales"
+    google_sheets_post_sales_worksheet: str = "Post Sales"
     google_service_account_file: str | None = None
     google_service_account_json: SecretStr | None = None
 

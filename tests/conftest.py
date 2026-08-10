@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 import pytest
 import pytest_asyncio
 
+from app.bot import copy as _copy
 from app.bot.machine import ConversationMachine
 from app.core.config import Settings
 from app.db.base import Base
@@ -179,6 +180,21 @@ class Harness:
         )
         await self.service.process_inbound(inbound)
         return [message for _, message in self.messaging.sent[before:]]
+
+    async def give_name(self, name: str) -> list[OutboundMessage]:
+        """Answer the name question, then confirm the WhatsApp number.
+
+        Capture asks for the callback number between the name and the time, so
+        almost every booking test needs both steps. Kept here rather than
+        repeated inline so the next change to the slot order touches one place
+        instead of every test that books a call.
+        """
+        replies = await self.say(name)
+        # Post-sales asks for email and course before the number, so the phone
+        # question may not be next. Confirm it only if that is what was asked.
+        if await self.state() == "ASK_PHONE":
+            replies = await self.say(reply_id=_copy.PHONE_CONFIRM)
+        return replies
 
     async def state(self) -> str:
         from app.repositories.conversation_repository import ConversationRepository

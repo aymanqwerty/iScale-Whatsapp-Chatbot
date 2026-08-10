@@ -69,6 +69,41 @@ class Course:
         """
         return bool(self.raw.get("featured", False))
 
+    @property
+    def group(self) -> str:
+        """Which menu branch this course belongs to.
+
+        Mirrors the site's own grouping: `cohort`, `advance`, `foundation`,
+        `free`. Only `cohort` and `advance` are ever offered as menu rows -
+        foundation and free courses are answered honestly when a user names one,
+        but the funnel never volunteers them.
+        """
+        return str(self.raw.get("group", "")).strip().lower()
+
+    @property
+    def menu_label(self) -> str:
+        """Short title for a menu button, falling back to the full name.
+
+        WhatsApp caps a reply-button title at 20 characters and truncates
+        anything longer with an ellipsis rather than raising, so every course
+        that appears in a menu carries a hand-picked short label. The fallback
+        keeps a newly added course visible instead of hiding it.
+        """
+        return str(self.raw.get("menu_label") or self.name).strip()
+
+    @property
+    def menu_order(self) -> int:
+        """Position within the group's menu. Lower comes first.
+
+        Explicit rather than alphabetical: the required order happens to match
+        alphabetically today, so a rename would silently reshuffle a menu the
+        business cares about.
+        """
+        try:
+            return int(self.raw.get("menu_order", 99))
+        except (TypeError, ValueError):
+            return 99
+
     def summary_line(self) -> str:
         """One-line blurb for menus and confirmations."""
         bits = [self.short_description]

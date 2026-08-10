@@ -16,11 +16,19 @@ class ConversationState(StrEnum):
     MAIN_MENU = "MAIN_MENU"
 
     # Pre-sales branch
+    #: Choosing between cohort courses, advance courses and "not sure yet".
+    COURSE_GROUP = "COURSE_GROUP"
     COURSE_SELECTION = "COURSE_SELECTION"
     COURSE_QNA = "COURSE_QNA"
     GENERAL_QNA = "GENERAL_QNA"
+    #: "Not sure yet": learn what the person does, then pitch AI For Everyone
+    #: against their actual work rather than listing the catalogue at them.
+    DISCOVERY = "DISCOVERY"
 
     # Post-sales branch
+    #: "Already Enrolled": free or paid, asked before anything else. A free
+    #: student is never offered a callback, so this cannot come later.
+    ENROLLMENT_TYPE = "ENROLLMENT_TYPE"
     POST_SALES = "POST_SALES"
     SUPPORT_QUERY = "SUPPORT_QUERY"
     SUPPORT_CALLBACK = "SUPPORT_CALLBACK"
@@ -30,6 +38,12 @@ class ConversationState(StrEnum):
     #: "You already have a call booked - move it, or add another?"
     CONFIRM_RESCHEDULE = "CONFIRM_RESCHEDULE"
     ASK_NAME = "ASK_NAME"
+    #: Post-sales only. A support call is booked against an account, so these
+    #: two are required before anything is written.
+    ASK_EMAIL = "ASK_EMAIL"
+    ASK_ENROLLED_COURSE = "ASK_ENROLLED_COURSE"
+    #: Confirm the WhatsApp number or take a different one.
+    ASK_PHONE = "ASK_PHONE"
     ASK_CALLBACK_TIME = "ASK_CALLBACK_TIME"
     ASK_REMARKS = "ASK_REMARKS"
     LEAD_CREATED = "LEAD_CREATED"
@@ -43,6 +57,7 @@ QNA_STATES: frozenset[ConversationState] = frozenset(
         ConversationState.COURSE_QNA,
         ConversationState.GENERAL_QNA,
         ConversationState.SUPPORT_QUERY,
+        ConversationState.DISCOVERY,
     }
 )
 
@@ -50,6 +65,9 @@ QNA_STATES: frozenset[ConversationState] = frozenset(
 CALLBACK_CAPTURE_STATES: frozenset[ConversationState] = frozenset(
     {
         ConversationState.ASK_NAME,
+        ConversationState.ASK_EMAIL,
+        ConversationState.ASK_ENROLLED_COURSE,
+        ConversationState.ASK_PHONE,
         ConversationState.ASK_CALLBACK_TIME,
         ConversationState.ASK_REMARKS,
     }

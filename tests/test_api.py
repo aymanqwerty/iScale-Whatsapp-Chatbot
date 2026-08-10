@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
 from app.bot import copy
-from app.core.config import Settings
+from app.core.config import BASE_DIR, Settings
 from app.db.base import Base
 from app.domain.messaging import OutboundMessage
 from app.main import create_app
@@ -136,7 +136,16 @@ def test_readiness_reports_each_dependency(client: TestClient) -> None:
     payload = response.json()
     assert payload["status"] == "ready"
     assert payload["checks"]["database"] == "ok"
-    assert payload["checks"]["knowledge_base"]["courses"] == 8
+    # Counted from the real knowledge base rather than hard-coded: the point of
+    # this check is that the courses loaded at all, and pinning the number meant
+    # every course the business added broke an unrelated readiness test.
+    expected = len(
+        json.loads(
+            (BASE_DIR / "knowledge" / "courses.json").read_text(encoding="utf-8")
+        )["courses"]
+    )
+    assert payload["checks"]["knowledge_base"]["courses"] == expected
+    assert payload["checks"]["knowledge_base"]["snippets"] > 0
 
 
 def test_root_reports_the_service(client: TestClient) -> None:
@@ -314,7 +323,9 @@ def test_simulator_drives_a_full_lead(client: TestClient) -> None:
 
     assert say("hi")["state"] == "MAIN_MENU"
     assert say(reply_id=copy.MENU_COUNSELOR)["state"] == "ASK_NAME"
-    assert say("Rahul Verma")["state"] == "ASK_CALLBACK_TIME"
+    # Capture confirms the callback number between the name and the time.
+    assert say("Rahul Verma")["state"] == "ASK_PHONE"
+    assert say(reply_id=copy.PHONE_CONFIRM)["state"] == "ASK_CALLBACK_TIME"
     assert say("tomorrow 3pm")["state"] == "ASK_REMARKS"
 
     final = say("please discuss the fees")

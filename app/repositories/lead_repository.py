@@ -27,6 +27,11 @@ class LeadRepository:
         preferred_time: datetime | None = None,
         preferred_time_raw: str | None = None,
         remarks: str | None = None,
+        contact_phone: str | None = None,
+        email: str | None = None,
+        enrolled_course: str | None = None,
+        profession: str | None = None,
+        issue_type: str | None = None,
     ) -> Lead:
         lead = Lead(
             user_id=user_id,
@@ -39,6 +44,11 @@ class LeadRepository:
             preferred_time=preferred_time,
             preferred_time_raw=preferred_time_raw,
             remarks=remarks,
+            contact_phone=contact_phone,
+            email=email,
+            enrolled_course=enrolled_course,
+            profession=profession,
+            issue_type=issue_type,
             sync_status=SyncStatus.PENDING,
         )
         self._session.add(lead)

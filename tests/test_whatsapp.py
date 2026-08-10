@@ -377,13 +377,20 @@ def test_menus_have_no_row_descriptions(knowledge_base: KnowledgeBase) -> None:
     reintroduce them.
     """
     menus = [
-        copy.course_menu(knowledge_base),
+        copy.welcome_message("iScale"),
+        copy.main_menu(),
+        copy.course_menu(),
+        copy.course_group_submenu(knowledge_base, "cohort"),
+        copy.course_group_submenu(knowledge_base, "advance"),
+        copy.enrollment_type_menu(),
         copy.other_courses_menu(knowledge_base),
         copy.support_menu(),
     ]
 
     for menu in menus:
-        assert menu.list_rows, "expected a list message"
+        assert menu.options, "every menu must offer something to tap"
+        # Short menus render as buttons, which have no description field at all;
+        # only the list-rendered ones can carry one.
         for row in menu.list_rows:
             assert row.title
             assert row.description == "", f"{row.title!r} still carries a description"

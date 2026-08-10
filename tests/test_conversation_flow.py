@@ -49,7 +49,7 @@ async def test_retired_general_option_is_still_handled(harness: Harness) -> None
 async def test_returning_user_is_greeted_by_name(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Priya Sharma")
+    await harness.give_name("Priya Sharma")
     await harness.say("tomorrow 4pm")
     await harness.say("skip")
 
@@ -80,18 +80,61 @@ async def test_duplicate_webhook_delivery_is_ignored(harness: Harness) -> None:
 # --------------------------------------------------------------------------- #
 # Pre-sales
 # --------------------------------------------------------------------------- #
-async def test_course_menu_is_built_from_the_knowledge_base(harness: Harness) -> None:
+async def test_course_branch_opens_with_the_group_menu(harness: Harness) -> None:
+    """"Not Enrolled Yet" asks which kind of course before naming any."""
     await harness.say("hi")
 
     replies = await harness.say(reply_id=copy.MENU_COURSES)
 
-    titles = {title for _, title in replies[0].options}
-    assert "Master Of Data Analytics Program" in titles
-    assert "AI Engineer Advance Program" in titles
-    # Non-featured courses are behind the "Other courses" row, not listed.
-    assert "Free Data Analytics Course" not in titles
-    assert "Not sure yet" in titles
+    assert [t for _, t in replies[0].options] == [
+        "Cohort Courses",
+        "Advance Courses",
+        "Not sure yet",
+    ]
+    assert await harness.state() == "COURSE_GROUP"
+
+
+async def test_course_submenus_match_the_specified_order(harness: Harness) -> None:
+    """Both submenus are exact: same courses, same sequence, every time.
+
+    Order is business-chosen, not alphabetical - cohort leads with AI For
+    Everyone because that is the course this funnel exists to sell.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+
+    cohort = await harness.say(reply_id=copy.GROUP_COHORT)
+    assert [t for _, t in cohort[0].options] == [
+        "AI For Everyone",
+        "ML with Agentic AI",
+    ]
     assert await harness.state() == "COURSE_SELECTION"
+
+    await harness.say("menu")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    advance = await harness.say(reply_id=copy.GROUP_ADVANCE)
+    assert [t for _, t in advance[0].options] == [
+        "AI Engineer Advance",
+        "Data Science + GenAI",
+        "Master of Analytics",
+    ]
+
+
+async def test_foundation_and_free_courses_are_off_the_menu(harness: Harness) -> None:
+    """They stay answerable by name, but the funnel never offers them."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+
+    offered = set()
+    for group in (copy.GROUP_COHORT, copy.GROUP_ADVANCE):
+        await harness.say("menu")
+        await harness.say(reply_id=copy.MENU_COURSES)
+        replies = await harness.say(reply_id=group)
+        offered |= {t for _, t in replies[0].options}
+
+    assert "Free Data Analytics Course" not in offered
+    assert "Power BI & Tableau For Data Visualization" not in offered
+    assert "AI Powered Excel Full Course" not in offered
 
 
 async def test_selecting_a_course_enters_qna(harness: Harness) -> None:
@@ -165,7 +208,7 @@ async def test_full_pre_sales_lead_capture(harness: Harness) -> None:
 
     assert await harness.state() == "ASK_NAME"
 
-    await harness.say("Rahul Verma")
+    await harness.give_name("Rahul Verma")
     assert await harness.state() == "ASK_CALLBACK_TIME"
 
     replies = await harness.say("tomorrow at 4 pm")
@@ -194,7 +237,7 @@ async def test_invalid_callback_time_is_rejected_then_accepted(
 ) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Ananya")
+    await harness.give_name("Ananya")
 
     replies = await harness.say("friday 3pm")
 
@@ -210,7 +253,7 @@ async def test_name_is_extracted_from_a_sentence(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
 
-    await harness.say("my name is Sneha Iyer")
+    await harness.give_name("my name is Sneha Iyer")
 
     assert await harness.state() == "ASK_CALLBACK_TIME"
 
@@ -235,7 +278,7 @@ async def test_unusable_name_is_asked_again(harness: Harness) -> None:
 async def test_skipping_remarks_creates_a_lead_without_them(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Karan")
+    await harness.give_name("Karan")
     await harness.say("tomorrow 5pm")
 
     await harness.say("skip")
@@ -248,19 +291,51 @@ async def test_skipping_remarks_creates_a_lead_without_them(harness: Harness) ->
 # --------------------------------------------------------------------------- #
 # Post-sales
 # --------------------------------------------------------------------------- #
-async def test_enrolled_user_reaches_the_support_menu(harness: Harness) -> None:
+async def test_enrolled_user_is_asked_free_or_paid_first(harness: Harness) -> None:
+    """The split must come before the support menu.
+
+    A free-course student is never offered a callback, so asking what their
+    issue is before knowing which they are would promise help we do not give.
+    """
     await harness.say("hi")
 
     replies = await harness.say(reply_id=copy.MENU_ENROLLED)
 
-    titles = {title for _, title in replies[-1].options}
-    assert {"Assignment", "Technical Issue", "Certificate"} <= titles
+    assert [t for _, t in replies[-1].options] == ["Paid Course", "Free Course"]
+    assert await harness.state() == "ENROLLMENT_TYPE"
+
+
+async def test_paid_student_reaches_the_support_menu(harness: Harness) -> None:
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_ENROLLED)
+
+    replies = await harness.say(reply_id=copy.ENROLLED_PAID)
+
+    assert [t for _, t in replies[-1].options] == [
+        "Video Related",
+        "Technical Issue",
+        "Other",
+    ]
     assert await harness.state() == "POST_SALES"
+
+
+async def test_free_course_student_gets_no_callback_and_enters_discovery(
+    harness: Harness,
+) -> None:
+    """Told plainly there is no support, then treated as a warm pre-sales lead."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_ENROLLED)
+
+    replies = await harness.say(reply_id=copy.ENROLLED_FREE)
+
+    assert "don't come with" in replies[0].text
+    assert await harness.state() == "DISCOVERY"
 
 
 async def test_full_post_sales_lead_capture(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_ENROLLED)
+    await harness.say(reply_id=copy.ENROLLED_PAID)
     await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}technical")
 
     replies = await harness.say("I cannot log in to the student portal")
@@ -270,14 +345,77 @@ async def test_full_post_sales_lead_capture(harness: Harness) -> None:
     await harness.say(reply_id=copy.CONFIRM_NO)  # "Please call me"
     assert await harness.state() == "ASK_NAME"
 
-    await harness.say("Meera")
+    # Post-sales needs identifying details before anything is written: a support
+    # call is booked against an account, not against a phone number.
+    await harness.give_name("Meera")
+    assert await harness.state() == "ASK_EMAIL"
+    await harness.say("meera@example.com")
+    assert await harness.state() == "ASK_ENROLLED_COURSE"
+    await harness.say("Data Science With Generative AI Course")
     await harness.say("tomorrow 11:30 am")
     await harness.say("skip")
 
     leads = await harness.leads()
     assert len(leads) == 1
-    assert leads[0].type is LeadType.POST_SALES
-    assert leads[0].interested_course == "Technical Issue"
+    lead = leads[0]
+    assert lead.type is LeadType.POST_SALES
+    assert lead.issue_type == "Technical Issue"
+    assert lead.email == "meera@example.com"
+    assert lead.enrolled_course == "Data Science With Generative AI Course"
+    assert lead.contact_phone == harness.phone
+
+
+async def test_post_sales_booking_is_refused_without_an_email(
+    harness: Harness,
+) -> None:
+    """No email, no booking - but explained, and not a dead end.
+
+    Nothing is written to the sheet, and the conversation stays open so a user
+    who was merely hesitant can still book a minute later.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_ENROLLED)
+    await harness.say(reply_id=copy.ENROLLED_PAID)
+    await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}technical")
+    await harness.say("I cannot log in")
+    await harness.say(reply_id=copy.CONFIRM_NO)
+    await harness.give_name("Meera")
+
+    replies = await harness.say("no, I would rather not share it")
+
+    assert "can't book a support call without" in replies[0].text
+    assert await harness.leads() == []
+    assert await harness.state() != "CLOSED"
+
+
+async def test_several_details_in_one_message_are_all_captured(
+    harness: Harness,
+) -> None:
+    """The point of slot filling: one message can answer four questions.
+
+    The old chain asked name, then time, then remarks, one per turn - so a user
+    who volunteered everything at once was still asked for each piece in order.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_ENROLLED)
+    await harness.say(reply_id=copy.ENROLLED_PAID)
+    await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}video")
+    await harness.say("videos are not playing")
+    await harness.say(reply_id=copy.CONFIRM_NO)
+
+    await harness.say(
+        "I am Meera, meera@example.com, 9812345678, "
+        "Master Of Data Analytics Program"
+    )
+    await harness.say("tomorrow 11:30 am")
+    await harness.say("skip")
+
+    leads = await harness.leads()
+    assert len(leads) == 1
+    lead = leads[0]
+    assert lead.email == "meera@example.com"
+    assert lead.contact_phone == "919812345678"
+    assert lead.enrolled_course == "Master Of Data Analytics Program"
 
 
 async def test_support_answer_is_grounded_and_audience_filtered(
@@ -292,7 +430,8 @@ async def test_support_answer_is_grounded_and_audience_filtered(
     """
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_ENROLLED)
-    await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}assignment")
+    await harness.say(reply_id=copy.ENROLLED_PAID)
+    await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}video")
 
     await harness.say("where do I submit my assignment?")
 
@@ -332,7 +471,7 @@ async def test_menu_command_is_ignored_while_capturing_a_name(
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
 
-    await harness.say("Menaka")
+    await harness.give_name("Menaka")
 
     assert await harness.state() == "ASK_CALLBACK_TIME"
 
@@ -404,7 +543,7 @@ async def test_unsupported_media_gets_a_gentle_nudge(harness: Harness) -> None:
 async def test_lead_is_pushed_to_the_sink(harness: Harness) -> None:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Dev")
+    await harness.give_name("Dev")
     await harness.say("tomorrow 3pm")
     await harness.say("skip")
 
@@ -437,7 +576,7 @@ async def test_sink_failure_is_recorded_but_does_not_lose_the_lead(
 
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Ishaan")
+    await harness.give_name("Ishaan")
     await harness.say("tomorrow 3pm")
     replies = await harness.say("skip")
 
@@ -468,7 +607,7 @@ async def test_leads_captured_before_the_sink_existed_are_backfilled(
 
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Nishant")
+    await harness.give_name("Nishant")
     await harness.say("tomorrow 3pm")
     await harness.say("skip")
 
@@ -519,8 +658,25 @@ async def test_a_tapped_menu_row_works_from_any_state(harness: Harness) -> None:
 
     replies = await harness.say(reply_id=copy.MENU_COURSES)
 
-    assert await harness.state() == "COURSE_SELECTION"
-    assert any("programs" in r.text for r in replies)
+    assert await harness.state() == "COURSE_GROUP"
+    assert any("Cohort Courses" == t for r in replies for _, t in r.options)
+
+
+async def test_a_plain_question_at_a_menu_is_not_hijacked_by_the_pitch(
+    harness: Harness,
+) -> None:
+    """Discovery carries the AI For Everyone pitch; a factual question must not.
+
+    Someone asking about working hours at the course menu wants the working
+    hours. Routing that into the sales branch would answer a question nobody
+    asked, which is exactly the failure the menu restructure risked.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+
+    await harness.say("what are your working hours")
+
+    assert await harness.state() == "GENERAL_QNA"
 
 
 async def test_asking_what_courses_exist_shows_the_menu(harness: Harness) -> None:
@@ -533,9 +689,10 @@ async def test_asking_what_courses_exist_shows_the_menu(harness: Harness) -> Non
 
     replies = await harness.say("tell me about each and every course available")
 
-    assert await harness.state() == "COURSE_SELECTION"
+    assert await harness.state() == "COURSE_GROUP"
     titles = {t for _, t in replies[0].options}
-    assert "AI Engineer Advance Program" in titles
+    assert "Advance Courses" in titles
+    assert "Cohort Courses" in titles
     assert harness.llm.calls == [], "the model must not be consulted for this"
 
 
@@ -560,7 +717,7 @@ async def test_a_name_given_while_answering_the_time_is_kept(
     """Observed: the lead went out under the previous name."""
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Akshat Trivedi")
+    await harness.give_name("Akshat Trivedi")
 
     await harness.say("my name is Ayush Raj and schedule the call for 11 august at 4 pm")
     await harness.say("skip")
@@ -577,7 +734,7 @@ async def test_a_rejected_time_keeps_the_date_the_user_gave(
     the lead is wasted."""
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Akshat Trivedi")
+    await harness.give_name("Akshat Trivedi")
 
     # 4:30 am is outside calling hours, so this is rejected.
     await harness.say("schedule the call for 10 august at 4:30 am")
@@ -596,7 +753,7 @@ async def test_a_rejected_time_keeps_the_date_the_user_gave(
 async def _book(harness: Harness, when: str) -> int:
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COUNSELOR)
-    await harness.say("Ayman Akram")
+    await harness.give_name("Ayman Akram")
     await harness.say(when)
     await harness.say("skip")
     leads = await harness.leads()
