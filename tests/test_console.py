@@ -294,3 +294,90 @@ def test_an_empty_message_is_rejected(client: TestClient) -> None:
     response = client.post(f"{BASE}/api/send", json={"phone": USER_PHONE, "text": ""})
 
     assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# Live updates
+# --------------------------------------------------------------------------- #
+def test_the_stream_requires_a_session(client: TestClient) -> None:
+    """The socket must not become a second, unauthenticated way in."""
+    from starlette.websockets import WebSocketDisconnect as WSDisconnect
+
+    with pytest.raises(WSDisconnect):
+        with client.websocket_connect(f"{BASE}/api/stream"):
+            pass
+
+
+def test_the_stream_signals_new_activity(client: TestClient) -> None:
+    """A nudge carrying only the number - never the message content."""
+    _login(client)
+
+    with client.websocket_connect(f"{BASE}/api/stream") as ws:
+        _talk(client, "hi")
+        event = ws.receive_json()
+
+    assert event["type"] == "activity"
+    assert event["phone"] == USER_PHONE
+    assert "text" not in event and "message" not in event
+
+
+def test_the_stream_signals_during_a_handover(client: TestClient) -> None:
+    """The console is the only thing answering, so it must hear every message."""
+    _talk(client, "hi")
+    _login(client)
+    client.post(f"{BASE}/api/handover", json={"phone": USER_PHONE, "paused": True})
+
+    with client.websocket_connect(f"{BASE}/api/stream") as ws:
+        _talk(client, "anyone there?")
+        event = ws.receive_json()
+
+    assert event["type"] == "activity"
+    assert event["phone"] == USER_PHONE
+
+
+def test_listing_conversations_is_one_query(client: TestClient) -> None:
+    """Regression: a per-conversation preview query made the endpoint slow
+    enough that browser polls overlapped and duplicated messages on screen.
+    """
+    from sqlalchemy import event as sa_event
+
+    for index in range(6):
+        phone = f"91999900{index:04d}"
+        assert (
+            client.post("/api/v1/simulate", json={"phone": phone, "text": "hi"}).status_code
+            == 200
+        )
+    _login(client)
+
+    engine = client.app.state.container.database.engine.sync_engine  # type: ignore[attr-defined]
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, *args):  # type: ignore[no-untyped-def]
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    sa_event.listen(engine, "before_cursor_execute", record)
+    try:
+        payload = client.get(f"{BASE}/api/conversations").json()
+    finally:
+        sa_event.remove(engine, "before_cursor_execute", record)
+
+    assert len(payload["conversations"]) >= 6
+    assert len(statements) == 1, (
+        f"expected one SELECT, got {len(statements)} - the N+1 is back"
+    )
+
+
+def test_the_list_carries_both_name_and_number(client: TestClient) -> None:
+    _talk(client, "hi")
+    _login(client)
+
+    row = next(
+        c
+        for c in client.get(f"{BASE}/api/conversations").json()["conversations"]
+        if c["phone"] == USER_PHONE
+    )
+
+    assert row["phone"] == USER_PHONE
+    assert "name" in row
+    assert row["last_message"]

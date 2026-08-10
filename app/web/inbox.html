@@ -32,6 +32,7 @@
   .row.active { background:#2a3942; border-left-color:var(--accent); }
   .row .top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
   .row .who { font-weight:600; font-size:14px; }
+  .row .num { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
   .row .when { color:var(--muted); font-size:11px; white-space:nowrap; }
   .row .prev { color:var(--muted); font-size:13px; margin-top:2px;
                overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -108,10 +109,22 @@
 <script>
 const API = '/api/v1/console/api';
 let current = null;       // phone in view
-let lastId = 0;           // highest message id rendered, for incremental polling
+let lastId = 0;           // highest message id rendered, for incremental fetching
 let paused = false;
 let canReply = false;
 let convos = [];
+
+// Every message id already on screen. This is the guarantee that a message can
+// never be drawn twice: two overlapping responses can carry the same rows, and
+// checking the id at render time makes duplication structurally impossible
+// rather than merely unlikely.
+let seen = new Set();
+
+// Only one fetch in flight at a time. The original bug: a poll every 2s against
+// a server taking longer than 2s meant the second request left with the same
+// `after_id` as the first, so both returned the same messages and both appended
+// them. The slower the server, the more copies.
+let fetching = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -128,6 +141,12 @@ function timeAgo(iso) {
   if (s < 3600) return Math.floor(s / 60) + 'm';
   if (s < 86400) return Math.floor(s / 3600) + 'h';
   return Math.floor(s / 86400) + 'd';
+}
+
+function prettyPhone(p) {
+  const d = String(p).replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('91')) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
+  return '+' + d;
 }
 
 function clock(iso) {
@@ -150,7 +169,7 @@ function renderList() {
 
       const top = document.createElement('div'); top.className = 'top';
       const who = document.createElement('span'); who.className = 'who';
-      who.textContent = c.name || c.phone;
+      who.textContent = c.name || 'Unknown';
       if (c.bot_paused) {
         const pill = document.createElement('span');
         pill.className = 'pill'; pill.textContent = 'YOU';
@@ -160,10 +179,15 @@ function renderList() {
       when.className = 'when'; when.textContent = timeAgo(c.last_activity);
       top.append(who, when);
 
+      // Name and number both: staff recognise regulars by name, but the number
+      // is what they cross-check against the leads sheet.
+      const num = document.createElement('div'); num.className = 'num';
+      num.textContent = prettyPhone(c.phone);
+
       const prev = document.createElement('div'); prev.className = 'prev';
       prev.textContent = (c.last_sender === 'USER' ? '' : '↩ ') + (c.last_message || '');
 
-      row.append(top, prev);
+      row.append(top, num, prev);
       row.addEventListener('click', () => open(c.phone));
       list.appendChild(row);
     });
@@ -177,8 +201,12 @@ async function loadConversations() {
 
 function renderMessages(messages, replace) {
   const thread = $('thread');
-  if (replace) thread.replaceChildren();
+  if (replace) { thread.replaceChildren(); seen = new Set(); }
+  let added = 0;
   messages.forEach(m => {
+    if (seen.has(m.id)) return;   // already drawn - never draw it again
+    seen.add(m.id);
+    added++;
     const el = document.createElement('div');
     el.className = 'msg ' + m.sender;
     if (m.sender === 'AGENT') {
@@ -193,7 +221,7 @@ function renderMessages(messages, replace) {
     thread.appendChild(el);
     lastId = Math.max(lastId, m.id);
   });
-  if (messages.length) thread.scrollTop = thread.scrollHeight;
+  if (added) thread.scrollTop = thread.scrollHeight;
 }
 
 function paintControls() {
@@ -224,14 +252,23 @@ async function open(phone) {
 
 async function poll(replace) {
   if (!current) return;
-  const r = await api(`/messages/${encodeURIComponent(current)}?after_id=${replace ? 0 : lastId}`);
-  if (!r.ok) return;
-  const d = await r.json();
-  paused = d.bot_paused; canReply = d.can_reply;
-  $('hWho').textContent = d.name || d.phone;
-  $('hSub').textContent = d.name ? d.phone : '';
-  renderMessages(d.messages, replace);
-  paintControls();
+  if (fetching && !replace) return;   // a request is already on its way
+  fetching = true;
+  const phone = current;
+  try {
+    const r = await api(`/messages/${encodeURIComponent(phone)}?after_id=${replace ? 0 : lastId}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    // The user may have clicked another conversation while this was in flight.
+    if (phone !== current) return;
+    paused = d.bot_paused; canReply = d.can_reply;
+    $('hWho').textContent = d.name || 'Unknown';
+    $('hSub').textContent = prettyPhone(d.phone);
+    renderMessages(d.messages, replace);
+    paintControls();
+  } finally {
+    fetching = false;
+  }
 }
 
 $('toggle').addEventListener('click', async () => {
@@ -276,12 +313,45 @@ $('signout').addEventListener('click', async () => {
   location.href = '/api/v1/console';
 });
 
-// Polling rather than websockets: it survives the instance sleeping and any
-// dropped connection with no reconnect logic, and for a few internal agents the
-// traffic is nothing. Only messages newer than `lastId` come back.
+// ---- live updates -------------------------------------------------------
+// A WebSocket carries only a nudge ("this number has activity"), never message
+// content - the delta still comes through the authenticated endpoint, so the
+// socket can never become a second way to read customer data.
+//
+// Polling stays as a fallback at a slower cadence. A dropped socket then costs
+// a few seconds of latency instead of a dead page, which matters on a free
+// instance that sleeps.
+let socket = null;
+let retry = 1000;
+
+function connect() {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  try {
+    socket = new WebSocket(`${scheme}://${location.host}${API}/stream`);
+  } catch { return schedule(); }
+
+  socket.onopen = () => { retry = 1000; };
+  socket.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type !== 'activity') return;          // ping keepalive
+    if (msg.phone === current) poll(false).catch(() => {});
+    loadConversations().catch(() => {});
+  };
+  socket.onclose = schedule;
+  socket.onerror = () => { try { socket.close(); } catch {} };
+}
+
+function schedule() {
+  socket = null;
+  setTimeout(connect, retry);
+  retry = Math.min(retry * 2, 30000);   // back off, do not hammer a sleeping instance
+}
+
 loadConversations();
-setInterval(() => poll(false).catch(() => {}), 2000);
-setInterval(() => loadConversations().catch(() => {}), 10000);
+connect();
+setInterval(() => poll(false).catch(() => {}), 4000);
+setInterval(() => loadConversations().catch(() => {}), 20000);
 </script>
 </body>
 </html>

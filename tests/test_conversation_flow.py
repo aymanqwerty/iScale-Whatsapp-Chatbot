@@ -11,6 +11,27 @@ from app.services.crm.base import LEAD_COLUMNS
 from tests.conftest import Harness
 
 
+def _offer() -> dict[str, object]:
+    """The live offer, read from `offers.json`.
+
+    Hard-coding the code and the prices meant every change to the promotion
+    broke a dozen unrelated assertions - and what these tests actually care
+    about is whether the offer was shown, not what this month's numbers are.
+    """
+    import json
+
+    from app.core.config import BASE_DIR
+
+    path = BASE_DIR / "knowledge" / "offers.json"
+    return dict(json.loads(path.read_text(encoding="utf-8"))["offer"])
+
+
+OFFER = _offer()
+COUPON = str(OFFER["coupon_code"])
+LIST_PRICE = f"{int(OFFER['list_price_inr']):,}"
+BEST_PRICE = f"{int(OFFER['final_price_inr']):,}"
+
+
 # --------------------------------------------------------------------------- #
 # Entry
 # --------------------------------------------------------------------------- #
@@ -909,14 +930,14 @@ async def test_discount_is_offered_once_engagement_is_real(harness: Harness) -> 
     await harness.say("hi")
     await harness.say(reply_id=copy.MENU_COURSES)
     replies = await harness.say(reply_id=copy.COURSE_UNSURE)
-    assert "BOT32" not in harness.texts(replies), "offered before any engagement"
+    assert COUPON not in harness.texts(replies), "offered before any engagement"
 
     seen = ""
     for message in ("i am a doctor", "tell me more", "okay what else"):
         seen += harness.texts(await harness.say(message))
 
-    assert "BOT32" in seen, "the discount was never offered"
-    assert "3,399" in seen and "4,999" in seen
+    assert COUPON in seen, "the discount was never offered"
+    assert BEST_PRICE in seen and LIST_PRICE in seen
     assert "theiscale.com" in seen
 
 
@@ -930,7 +951,7 @@ async def test_discount_is_never_repeated(harness: Harness) -> None:
     for message in ("i am a doctor", "tell me more", "okay", "and what else", "hmm"):
         seen += harness.texts(await harness.say(message))
 
-    assert seen.count("BOT32") == 1, f"offered {seen.count('BOT32')} times"
+    assert seen.count(COUPON) == 1, f"offered {seen.count(COUPON)} times"
 
 
 async def test_asking_how_to_join_offers_the_discount_immediately(
@@ -943,7 +964,7 @@ async def test_asking_how_to_join_offers_the_discount_immediately(
 
     replies = await harness.say("i am a student, how do i join this course")
 
-    assert "BOT32" in harness.texts(replies)
+    assert COUPON in harness.texts(replies)
 
 
 async def test_the_offer_always_keeps_the_counselor_route(harness: Harness) -> None:
@@ -953,7 +974,7 @@ async def test_the_offer_always_keeps_the_counselor_route(harness: Harness) -> N
     await harness.say(reply_id=copy.COURSE_UNSURE)
     replies = await harness.say("i am a doctor, how do i join")
 
-    offer = next(r for r in replies if "BOT32" in r.text)
+    offer = next(r for r in replies if COUPON in r.text)
     ids = {oid for oid, _ in offer.options}
     assert copy.MENU_COUNSELOR in ids, "no way to reach a human from the offer"
 
@@ -972,7 +993,7 @@ async def test_post_sales_never_sees_a_course_discount(harness: Harness) -> None
     for message in ("videos not playing", "still broken", "please help"):
         seen += harness.texts(await harness.say(message))
 
-    assert "BOT32" not in seen
+    assert COUPON not in seen
 
 
 async def test_the_coupon_is_never_visible_to_the_model(harness: Harness) -> None:
@@ -985,7 +1006,7 @@ async def test_the_coupon_is_never_visible_to_the_model(harness: Harness) -> Non
 
     for call in harness.llm.calls:
         blob = call["system_prompt"] + call["user_prompt"]
-        assert "BOT32" not in blob, "the coupon reached the model"
+        assert COUPON not in blob, "the coupon reached the model"
 
 
 async def test_only_the_discounted_course_ever_gets_the_coupon(
@@ -1009,7 +1030,7 @@ async def test_only_the_discounted_course_ever_gets_the_coupon(
         seen = ""
         for message in ("what is covered", "how long is it", "how do i join"):
             seen += harness.texts(await harness.say(message))
-        if "BOT32" in seen:
+        if COUPON in seen:
             offered_for.append(course.slug)
 
     assert offered_for == [discounted], (
@@ -1038,7 +1059,7 @@ async def test_discovery_steered_to_another_course_gets_no_coupon(
     ):
         seen += harness.texts(await harness.say(message))
 
-    assert "BOT32" not in seen
+    assert COUPON not in seen
 
 
 async def test_agentic_ai_is_a_course_not_a_request_for_a_human(
@@ -1161,7 +1182,7 @@ async def test_the_offer_is_not_followed_by_a_second_escalation(
     for message in ("i have a hotel", "yes please", "this sounds nice", "tell me more"):
         replies = await harness.say(message)
         joined = harness.texts(replies)
-        if "BOT32" in joined:
+        if COUPON in joined:
             saw_offer = True
             continue
         if saw_offer:
@@ -1213,7 +1234,7 @@ async def test_buying_intent_from_the_cohort_menu_gets_the_offer(
 
     replies = await harness.say("i want to purchase this course")
 
-    assert "BOT32" in harness.texts(replies)
+    assert COUPON in harness.texts(replies)
 
 
 async def test_the_pitch_guidance_follows_the_course_not_just_discovery(
@@ -1251,7 +1272,7 @@ async def test_a_price_question_closes_with_the_discount(harness: Harness) -> No
 
     replies = await harness.say("how much does it cost")
 
-    assert "BOT32" in harness.texts(replies)
+    assert COUPON in harness.texts(replies)
 
 
 async def test_a_price_question_on_another_course_stays_full_price(
@@ -1267,4 +1288,4 @@ async def test_a_price_question_on_another_course_stays_full_price(
     for message in ("how much does it cost", "what is the fees", "how do i buy it"):
         seen += harness.texts(await harness.say(message))
 
-    assert "BOT32" not in seen
+    assert COUPON not in seen

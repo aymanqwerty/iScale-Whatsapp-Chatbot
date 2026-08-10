@@ -306,13 +306,26 @@ def offer_message(offer: dict[str, object], course_name: str) -> OutboundMessage
     was = offer.get("list_price_inr")
     now = offer.get("final_price_inr")
     url = str(offer.get("payment_url", ""))
+    up_to = bool(offer.get("discount_is_maximum"))
+
+    if up_to:
+        # "Up to" means the coupon may give less, so the price is quoted as a
+        # best case rather than a struck-through certainty. Showing
+        # "~4,999~ -> 3,749" here would promise a number checkout might not
+        # honour, and being contradicted at the payment page loses the sale and
+        # the trust together.
+        headline = f"🎁 *Up to {percent}% off {course_name}*"
+        pricing = f"That's as low as *₹{now:,}* instead of ₹{was:,}"
+    else:
+        headline = f"🎁 *{percent}% off {course_name}*"
+        pricing = f"~₹{was:,}~  →  *₹{now:,}*  (you save ₹{saving:,})"
 
     text = (
         f"Since we've been chatting, I can give you something that isn't on the "
         f"website 👇\n\n"
-        f"🎁 *{percent}% off {course_name}*\n"
+        f"{headline}\n"
         f"Use code *{code}* at checkout\n"
-        f"~₹{was:,}~  →  *₹{now:,}*  (you save ₹{saving:,})\n\n"
+        f"{pricing}\n\n"
         f"{url}\n\n"
         f"⏳ This code is only for people who reach us here on WhatsApp, and "
         f"it won't stay open long.\n\n"

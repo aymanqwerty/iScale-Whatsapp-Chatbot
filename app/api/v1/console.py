@@ -13,12 +13,23 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
 from app.api.deps import ContainerDep, SessionDep, SettingsDep
+from app.core.config import Settings
+from app.core.events import broadcaster
 from app.core.console_auth import (
     SESSION_TTL_SECONDS,
     issue_session,
@@ -180,46 +191,59 @@ async def me(agent: AgentDep) -> dict[str, str]:
 async def list_conversations(
     agent: AgentDep, session: SessionDep, limit: int = 200
 ) -> dict[str, Any]:
-    """Most recently active first - the order an inbox is actually read in."""
-    latest = (
+    """Most recently active first - the order an inbox is actually read in.
+
+    ONE query, not one per conversation. The previous version fetched each
+    preview separately: 200 conversations meant 201 round trips to the pooler
+    every refresh, which made the endpoint slow enough that the browser's next
+    poll started before the previous one finished - and overlapping polls
+    duplicated messages on screen. The N+1 was the root cause of a bug that
+    looked nothing like a database problem.
+    """
+    newest = (
         select(
             Conversation.user_id.label("user_id"),
-            func.max(Conversation.last_activity_at).label("last_at"),
+            func.max(Message.id).label("message_id"),
         )
+        .join(Message, Message.conversation_id == Conversation.id)
         .group_by(Conversation.user_id)
         .subquery()
     )
+    # Columns, not ORM entities. Selecting `User` returns mapped objects whose
+    # relationships (`leads`, `conversations`) then load on their own - which
+    # reintroduced the N+1 through a different door, one query per relationship
+    # per page. Selecting the six columns actually needed keeps it to one.
     rows = (
         await session.execute(
-            select(User, latest.c.last_at)
-            .join(latest, latest.c.user_id == User.id)
-            .order_by(desc(latest.c.last_at))
+            select(
+                User.phone,
+                User.name,
+                User.profile_name,
+                User.bot_paused,
+                Message.message,
+                Message.sender,
+                Message.timestamp,
+            )
+            .join(newest, newest.c.user_id == User.id)
+            .join(Message, Message.id == newest.c.message_id)
+            .order_by(desc(Message.id))
             .limit(min(limit, 500))
         )
     ).all()
 
-    conversations = []
-    for user, last_at in rows:
-        preview = (
-            await session.execute(
-                select(Message)
-                .join(Conversation, Conversation.id == Message.conversation_id)
-                .where(Conversation.user_id == user.id)
-                .order_by(desc(Message.id))
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        conversations.append(
+    return {
+        "conversations": [
             {
-                "phone": user.phone,
-                "name": user.name or user.profile_name or "",
-                "last_activity": _iso(last_at),
-                "last_message": (preview.message[:120] if preview else ""),
-                "last_sender": str(preview.sender) if preview else "",
-                "bot_paused": bool(user.bot_paused),
+                "phone": phone,
+                "name": name or profile_name or "",
+                "last_activity": _iso(timestamp),
+                "last_message": (text or "")[:120],
+                "last_sender": str(sender),
+                "bot_paused": bool(paused),
             }
-        )
-    return {"conversations": conversations}
+            for phone, name, profile_name, paused, text, sender, timestamp in rows
+        ]
+    }
 
 
 @router.get("/api/messages/{phone}", summary="One thread")
@@ -365,8 +389,58 @@ async def send_message(
     conversation.last_activity_at = datetime.now(UTC)
     await session.commit()
 
+    broadcaster.publish(user.phone)
     logger.info("Agent message sent", extra={"agent": agent, "phone": _mask(user.phone)})
     return {"id": message.id, "sender": str(MessageSender.AGENT), "text": payload.text}
+
+
+# --------------------------------------------------------------------------- #
+# Live updates
+# --------------------------------------------------------------------------- #
+@router.websocket("/api/stream")
+async def stream(websocket: WebSocket) -> None:
+    """Push a signal whenever a number has new activity.
+
+    The payload is only `{"phone": ...}` - a nudge, not the message itself. The
+    browser then fetches the delta through the normal authenticated endpoint,
+    so the transcript has exactly one code path and the socket can never become
+    a second, unauthenticated way to read customer data.
+
+    The client keeps polling as a fallback, so a dropped socket degrades to the
+    old behaviour rather than to a dead page.
+    """
+    settings: Settings = websocket.app.state.container.settings
+    if not settings.console_ready:
+        await websocket.close(code=1008)
+        return
+
+    # Cookies are sent on the WebSocket handshake, so the same session applies.
+    token = websocket.cookies.get(COOKIE_NAME, "")
+    if not read_session(token, settings.console_session_secret.get_secret_value()):
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    try:
+        async with broadcaster.subscribe() as queue:
+            while True:
+                try:
+                    phone = await asyncio.wait_for(queue.get(), timeout=_PING_SECONDS)
+                except TimeoutError:
+                    # Idle keepalive. Render and most proxies drop a silent
+                    # socket after a minute or so, and a dead socket that still
+                    # looks open is worse than no socket at all.
+                    await websocket.send_json({"type": "ping"})
+                    continue
+                await websocket.send_json({"type": "activity", "phone": phone})
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # pragma: no cover - transport level
+        logger.debug("Console stream closed unexpectedly", exc_info=True)
+
+
+#: Below any sensible proxy idle timeout.
+_PING_SECONDS = 25.0
 
 
 # --------------------------------------------------------------------------- #
