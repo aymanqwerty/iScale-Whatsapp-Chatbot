@@ -1123,3 +1123,49 @@ async def test_discovery_still_refuses_genuine_off_topic(harness: Harness) -> No
         replies = await harness.say(message)
 
         assert refusal in harness.texts(replies), f"{message!r} was not refused"
+
+
+async def test_the_price_stays_in_scope_through_discovery(harness: Harness) -> None:
+    """Observed: "what is the fees" got "a counselor can confirm the price".
+
+    Discovery computed the course scope per call without storing it, so once the
+    turn moved to another handler the retrieval had no course at all and the fee
+    never reached the prompt. The model was not being coy - it genuinely had no
+    price in front of it.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+
+    for message in ("i have a hotel", "yes please", "what is the fees"):
+        await harness.say(message)
+        prompt = harness.llm.calls[-1]["user_prompt"]
+        assert "4,999" in prompt or "4999" in prompt, (
+            f"the price was not in scope after {message!r}"
+        )
+
+
+async def test_the_offer_is_not_followed_by_a_second_escalation(
+    harness: Harness,
+) -> None:
+    """The offer card already carries a counselor button - it IS the nudge.
+
+    Without consuming the nudge, the plain "shall a counselor call you?" fired
+    on the very next message: two escalation prompts back to back.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+
+    saw_offer = False
+    for message in ("i have a hotel", "yes please", "this sounds nice", "tell me more"):
+        replies = await harness.say(message)
+        joined = harness.texts(replies)
+        if "BOT32" in joined:
+            saw_offer = True
+            continue
+        if saw_offer:
+            assert "would you like one of our counselors" not in joined.lower(), (
+                "a plain callback offer followed the discount"
+            )
+    assert saw_offer, "the discount never appeared"
