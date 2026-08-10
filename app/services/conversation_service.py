@@ -15,6 +15,7 @@ from __future__ import annotations
 from app.bot.context import BotDependencies, TurnContext
 from app.bot.machine import ConversationMachine
 from app.core.config import Settings
+from app.core.events import broadcaster
 from app.core.logging import get_logger
 from app.db.session import Database
 from app.domain.enums import MessageSender
@@ -116,6 +117,9 @@ class ConversationService:
             # or a sales nudge in the middle of talking to a person.
             if user.bot_paused:
                 await conversations.touch(conversation, last_message=inbound.text)
+                # The console is the only thing that will answer now, so it has
+                # to know the moment this lands.
+                broadcaster.publish(user.phone)
                 logger.info(
                     "Message recorded but not answered - conversation is with an agent",
                     extra={"wa_message_id": inbound.wa_message_id},
@@ -146,6 +150,7 @@ class ConversationService:
             if result.close_conversation:
                 await conversations.close(conversation)
 
+            broadcaster.publish(user.phone)
             return result, user.phone
 
     # ------------------------------------------------------------------ #
