@@ -12,7 +12,12 @@ import pytest
 from app.bot import copy
 from app.core.config import Settings
 from app.domain.enums import MessageKind
-from app.domain.messaging import Button, ListRow, OutboundMessage
+from app.domain.messaging import (
+    BUTTON_TITLE_LIMIT,
+    Button,
+    ListRow,
+    OutboundMessage,
+)
 from app.schemas.whatsapp import WebhookPayload
 from app.services.knowledge.loader import KnowledgeBase
 from app.services.whatsapp.allowlist import PhoneAllowlist
@@ -372,8 +377,6 @@ def test_menus_have_no_row_descriptions(knowledge_base: KnowledgeBase) -> None:
     reintroduce them.
     """
     menus = [
-        copy.welcome_message("iScale"),
-        copy.main_menu(),
         copy.course_menu(knowledge_base),
         copy.other_courses_menu(knowledge_base),
         copy.support_menu(),
@@ -384,6 +387,32 @@ def test_menus_have_no_row_descriptions(knowledge_base: KnowledgeBase) -> None:
         for row in menu.list_rows:
             assert row.title
             assert row.description == "", f"{row.title!r} still carries a description"
+
+
+def test_main_menu_uses_inline_buttons_not_a_list() -> None:
+    """The three options must be tappable without opening anything first.
+
+    As a list they hid behind a "Choose an option" button, which cost a tap and
+    meant the user could not see the choices at all until they opened it.
+    """
+    for menu in (copy.welcome_message("iScale"), copy.main_menu()):
+        assert menu.buttons, "main menu must use buttons"
+        assert not menu.list_rows
+        assert menu.header is None, "the 'Main menu' header said nothing useful"
+        assert [b.id for b in menu.buttons] == [
+            oid for oid, _, _, _ in copy.MAIN_MENU_OPTIONS
+        ]
+
+
+def test_button_menu_titles_fit() -> None:
+    """A title over 20 characters is silently truncated with an ellipsis.
+
+    Nothing raises when that happens, so without this the first sign would be a
+    mangled button in production.
+    """
+    for _, title, _, _ in copy.MAIN_MENU_OPTIONS:
+        assert len(title) <= BUTTON_TITLE_LIMIT, f"{title!r} would be truncated"
+        assert Button(id="x", title=title).rendered_title() == title
 
 
 # --------------------------------------------------------------------------- #
