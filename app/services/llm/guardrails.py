@@ -54,9 +54,23 @@ _OFF_DOMAIN_PATTERNS: tuple[str, ...] = (
     r"\b(?:stock\s+tip|share\s+market\s+tip|crypto|bitcoin|trading\s+tip|lottery)\b",
     r"\b(?:joke|shayari|poem|write\s+a\s+story|riddle)\b",
     r"\b(?:horoscope|astrology|kundli|zodiac)\b",
-    r"\b(?:medicine|medical\s+advice|doctor|symptom|disease|prescription)\b",
-    r"\b(?:legal\s+advice|lawyer|court\s+case|lawsuit)\b",
+    # "doctor" and "lawyer" are professions before they are subjects, and the
+    # discovery branch exists to ask people what they do - blocking the bare
+    # nouns refused "I am a doctor, how will this help me?", which is the single
+    # most valuable message that branch can receive. The remaining tokens still
+    # catch an actual request for medical or legal advice.
+    r"\b(?:medicine|medical\s+advice|symptom|disease|prescription|diagnos)\w*\b",
+    r"\b(?:legal\s+advice|court\s+case|lawsuit)\b",
     r"\b(?:girlfriend|boyfriend|dating|marriage\s+proposal)\b",
+)
+
+#: Someone describing their own situation. The discovery branch opens by asking
+#: exactly this, so a message shaped like an answer to it is never off topic -
+#: whatever profession happens to be named.
+_DESCRIBES_SELF = re.compile(
+    r"\b(?:i\s*am|i'm|im|i\s+work|i\s+study|i\s+run|i\s+own|i\s+teach|"
+    r"my\s+profession|my\s+job|my\s+work|working\s+as|studying)\b",
+    re.IGNORECASE,
 )
 
 #: Vocabulary that marks a message as iScale business. Extended at build time
@@ -141,6 +155,12 @@ class TopicGuard:
         if self.is_injection(stripped):
             return True
         if not any(pattern.search(stripped) for pattern in self._off_domain):
+            return False
+        # Someone telling us what they do is on topic by definition - it is the
+        # question the discovery branch just asked them. Without this, "I'm a
+        # trader" or "I work in politics" is refused mid-funnel, and the reply
+        # reads as the bot rejecting the person rather than the subject.
+        if _DESCRIBES_SELF.search(stripped):
             return False
         # An off-domain subject alongside real iScale vocabulary is usually a
         # genuine question ("do you teach Python for share market analysis?").

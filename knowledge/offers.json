@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "The chatbot-exclusive discount. Business-editable: change the code, the",
+    "percentage or the expiry here and the bot follows, with no code change.",
+    "",
+    "IMPORTANT - this file is deliberately NOT indexed as a retrievable snippet.",
+    "The offer is sent by the state machine as a fixed message, never written by",
+    "the model. If the LLM could see it, it would paraphrase it, and a",
+    "paraphrased discount is a wrong discount: a hallucinated '50% off' or a",
+    "mistyped coupon is a promise the business has to honour or publicly break.",
+    "",
+    "Set \"enabled\": false to switch the offer off everywhere immediately."
+  ],
+  "offer": {
+    "enabled": true,
+    "course_slug": "ai-for-everyone",
+    "coupon_code": "BOT32",
+    "discount_percent": 32,
+    "list_price_inr": 4999,
+    "discount_inr": 1600,
+    "final_price_inr": 3399,
+    "payment_url": "https://www.theiscale.com/cohort/cohort-details/ai-for-everyone-complete-guide",
+    "scarcity_note": "limited-time offer for people who reach us on WhatsApp",
+    "exclusivity_note": "not listed on the website - it only works from this chat"
+  }
+}

@@ -118,6 +118,7 @@ class KnowledgeBase:
         placements: dict[str, Any],
         rules: dict[str, Any] | None = None,
         prompt_overrides: dict[str, Any] | None = None,
+        offer: dict[str, Any] | None = None,
         documents: dict[str, Any] | None = None,
     ) -> None:
         self._courses = courses
@@ -128,6 +129,7 @@ class KnowledgeBase:
         self._placements = placements
         self._rules = rules or {}
         self._prompt_overrides = prompt_overrides or {}
+        self._offer = offer or {}
         self._documents = documents or {}
 
     # --- structured access -------------------------------------------------
@@ -199,6 +201,19 @@ class KnowledgeBase:
         into the system prompt on every turn rather than into the index.
         """
         return dict(self._rules)
+
+    @property
+    def offer(self) -> dict[str, Any]:
+        """The chatbot-exclusive discount, or an empty dict when switched off.
+
+        Never indexed as a snippet and never shown to the model: the offer is
+        rendered by the state machine from these exact values. A paraphrased
+        coupon code or percentage is a promise the business then has to honour
+        or publicly retract.
+        """
+        if not self._offer.get("enabled"):
+            return {}
+        return dict(self._offer)
 
     @property
     def prompt_overrides(self) -> dict[str, Any]:
@@ -297,6 +312,8 @@ class KnowledgeLoader:
         rules = self._read("chatbot_rules.json")
         prompt_overrides = self._read("prompts.json")
         callback_rules = self._read("callback_rules.json")
+        # Read but deliberately NOT turned into snippets - see offers.json.
+        offer = self._read("offers.json").get("offer", {})
 
         courses = [
             Course(slug=_slugify(entry), name=str(entry.get("name", "")).strip(), raw=entry)
@@ -327,6 +344,7 @@ class KnowledgeLoader:
             placements=placements,
             rules=rules,
             prompt_overrides=prompt_overrides,
+            offer=offer,
             documents={
                 "callback_rules.json": callback_rules,
                 "policies.json": raw_policies,

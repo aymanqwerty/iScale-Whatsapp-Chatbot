@@ -44,11 +44,28 @@ _NEGATIVE_PHRASES = (
     "i'm good", "im good", "not yet",
 )
 
+#: Matched as substrings, so every entry here must be safe inside a longer
+#: word. "agent" is NOT - it lives in "agentic", and we sell a course called
+#: Machine Learning with Agentic AI, so asking about it threw the user straight
+#: into callback capture. Word-boundary triggers go in `_HUMAN_WORDS` instead.
 _HUMAN_PHRASES = (
-    "counselor", "counsellor", "human", "real person", "talk to someone",
-    "speak to someone", "call me", "callback", "call back", "agent",
-    "representative", "advisor", "adviser", "contact me", "phone me",
+    "counselor", "counsellor", "real person", "talk to someone",
+    "speak to someone", "call me", "callback", "call back",
+    "representative", "contact me", "phone me",
     "arrange a call", "schedule a call", "book a call",
+)
+
+#: Single words that must match whole - "human" must not fire on "humanities",
+#: "advisor" not on "advisory". "agent" is absent deliberately: we teach AI
+#: agents in both cohort courses, so "does it cover ai agents?" is a syllabus
+#: question, not a request for a person.
+_HUMAN_WORDS = re.compile(r"\b(?:human|advisor|adviser|executive)\b")
+
+#: "agent" only counts when someone is asking to be put through to one. This is
+#: the difference between "connect me to an agent" and "does it cover agents".
+_HUMAN_AGENT_RE = re.compile(
+    r"\b(?:talk|speak|connect|transfer|chat|put\s+me|route\s+me)\b"
+    r"[\w\s']{0,20}?\bagents?\b"
 )
 
 #: A request verb followed shortly by a "call" word: "i want a call",
@@ -189,6 +206,8 @@ def wants_human(text: str) -> bool:
     cleaned = normalize(text)
     if any(phrase in cleaned for phrase in _HUMAN_PHRASES):
         return True
+    if _HUMAN_WORDS.search(cleaned) or _HUMAN_AGENT_RE.search(cleaned):
+        return True
     return bool(_HUMAN_RE.search(cleaned))
 
 
@@ -290,6 +309,28 @@ def declines_to_share(text: str) -> bool:
         return True
     # A leading "no" is a refusal even when the rest is a polite sentence.
     return cleaned.split()[0] in {"no", "nope", "nah"}
+
+
+#: Explicit buying signals. Narrow on purpose: this short-circuits the usual
+#: "earn it over a few messages" pacing and shows the discount immediately, so a
+#: false positive means dangling a coupon at someone who was only browsing.
+_ENROL_PHRASES = (
+    "how to join", "how do i join", "how can i join", "want to join",
+    "how to enroll", "how do i enroll", "how to enrol", "want to enroll",
+    "how to buy", "how do i buy", "want to buy", "how to purchase",
+    "how to pay", "how do i pay", "want to pay", "payment link",
+    "how to register", "want to register", "sign me up", "count me in",
+    "i want this course", "i want this program", "ready to join",
+    "kaise join", "kaise le", "kaise kharide",
+)
+
+
+def wants_to_enroll(text: str) -> bool:
+    """Whether the user is asking how to actually buy."""
+    cleaned = normalize(text)
+    if not cleaned:
+        return False
+    return any(phrase in cleaned for phrase in _ENROL_PHRASES)
 
 
 def means_undecided(text: str) -> bool:

@@ -75,6 +75,8 @@ async def answer_with_optional_nudge(ctx: TurnContext) -> TurnResult:
     is asked to append: buttons are unambiguous, and the transition into
     `ASK_CALLBACK` has to happen whether or not the model cooperated.
     """
+    from app.bot.handlers.offer import maybe_offer, wants_to_buy
+
     result = TurnResult()
     resume_state = ctx.conversation.current_state
 
@@ -82,6 +84,15 @@ async def answer_with_optional_nudge(ctx: TurnContext) -> TurnResult:
     result.add(OutboundMessage(text=text))
 
     ctx.bump_qna_count()
+
+    # Someone reading about the discounted course gets the discount rather than
+    # a bare callback offer - it answers "why now?", which a callback does not.
+    # `maybe_offer` returns None unless this is the right course and moment, so
+    # the callback path below stays the default everywhere else.
+    closing = maybe_offer(ctx, force=wants_to_buy(ctx.text))
+    if closing is not None:
+        result.replies.extend(closing.replies)
+        return result
 
     if ctx.should_nudge_callback():
         ctx.mark_nudged()

@@ -50,6 +50,11 @@ CONFIRM_NO = "confirm:no"
 PHONE_CONFIRM = "phone:confirm"
 PHONE_OTHER = "phone:other"
 
+#: Replies to the discount offer. "Talk to a Counselor" reuses `MENU_COUNSELOR`
+#: so the escalation path is identical wherever it is tapped from.
+OFFER_DONE = "offer:done"
+OFFER_QUESTION = "offer:question"
+
 #: (id, title, description, keywords the user might type instead of tapping)
 #:
 #: The description is no longer rendered - menus show titles only, which reads
@@ -281,6 +286,49 @@ def support_menu() -> OutboundMessage:
     )
 
 
+def offer_message(offer: dict[str, object], course_name: str) -> OutboundMessage:
+    """The chatbot-exclusive discount, rendered from `offers.json`.
+
+    Assembled here from exact values rather than written by the model, and the
+    offer is deliberately absent from the retrieval index. A model asked to
+    "mention the discount" will eventually produce the wrong percentage or a
+    mistyped coupon - and every one of those is a price the business must then
+    either honour or publicly withdraw.
+
+    Both routes are always offered. A discount is not a reason to take the
+    counselor away from someone who wants one: plenty of people will not put a
+    card into a link a chatbot sent them, and losing those is worse than the
+    margin saved.
+    """
+    code = str(offer.get("coupon_code", ""))
+    percent = offer.get("discount_percent")
+    saving = offer.get("discount_inr")
+    was = offer.get("list_price_inr")
+    now = offer.get("final_price_inr")
+    url = str(offer.get("payment_url", ""))
+
+    text = (
+        f"Since we've been chatting, I can give you something that isn't on the "
+        f"website 👇\n\n"
+        f"🎁 *{percent}% off {course_name}*\n"
+        f"Use code *{code}* at checkout\n"
+        f"~₹{was:,}~  →  *₹{now:,}*  (you save ₹{saving:,})\n\n"
+        f"{url}\n\n"
+        f"⏳ This code is only for people who reach us here on WhatsApp, and "
+        f"it won't stay open long.\n\n"
+        f"Want to go ahead, or shall I have a counselor talk you through it "
+        f"first?"
+    )
+    return OutboundMessage(
+        text=text,
+        buttons=(
+            Button(id=OFFER_DONE, title="I'll enroll now"),
+            Button(id=MENU_COUNSELOR, title="Talk to a Counselor"),
+            Button(id=OFFER_QUESTION, title="I have a question"),
+        ),
+    )
+
+
 def phone_confirm(phone: str) -> OutboundMessage:
     """Confirm the WhatsApp number, or invite a different one."""
     return OutboundMessage(
@@ -362,6 +410,21 @@ POST_SALES_DETAILS_REQUIRED = (
     "not asking you to prove who you are on the call itself.\n\n"
     "Happy to take it whenever you're ready, and I can still answer anything "
     "else in the meantime."
+)
+
+#: After "I'll enroll now". Deliberately does not congratulate them on a
+#: purchase - we cannot see the payment, and treating a tap as a completed sale
+#: would be a lie the moment they close the page.
+OFFER_ACCEPTED = (
+    "Brilliant! 🎉\n\n"
+    "Just apply *{code}* at checkout here:\n{url}\n\n"
+    "If the code gives you any trouble, or you'd rather someone walked you "
+    "through it, say \"counselor\" and I'll arrange a call."
+)
+
+OFFER_QUESTION_PROMPT = (
+    "Of course - ask away! 😊 Happy to go through anything: what's covered, "
+    "how the classes work, or what you'd actually be able to build."
 )
 
 ASK_CALLBACK_PRE_SALES = (

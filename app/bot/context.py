@@ -39,6 +39,10 @@ CTX_PROFILE = "profile"
 
 #: Post-sales capture slots. A paid student's callback is only written once
 #: name, email and enrolled course are all present - these hold them until then.
+#: Set once the discount has been shown. A coupon repeated every few messages
+#: stops reading as a favour and starts reading as pressure.
+CTX_OFFER_SENT = "offer_sent"
+
 CTX_EMAIL = "email"
 CTX_ENROLLED_COURSE = "enrolled_course"
 CTX_CONTACT_PHONE = "contact_phone"
