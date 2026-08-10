@@ -15,6 +15,7 @@ from app.bot.handlers import HANDLERS
 from app.bot.handlers.callback import describe_slot, start_reschedule
 from app.bot.handlers.common import start_callback_capture
 from app.bot.handlers.discovery import start_discovery
+from app.bot.handlers.offer import handle_offer_reply
 from app.core.logging import get_logger
 from app.domain.enums import (
     CALLBACK_CAPTURE_STATES,
@@ -79,6 +80,13 @@ class ConversationMachine:
         conversation = ctx.conversation
         state = conversation.current_state
         text = ctx.text
+
+        # Offer buttons first: they are answers to the discount message, not
+        # navigation, and "Talk to a Counselor" on that card deliberately falls
+        # through to the shared escalation path below.
+        offer_reply = handle_offer_reply(ctx)
+        if offer_reply is not None:
+            return offer_reply
 
         navigation = self._tapped_navigation(ctx)
         if navigation is not None:

@@ -18,6 +18,7 @@ import re
 from app.bot import copy
 from app.bot.context import CTX_PROFILE, TurnContext
 from app.bot.handlers.common import answer_question, offer_callback
+from app.bot.handlers.offer import maybe_offer, wants_to_buy
 from app.core.logging import get_logger
 from app.domain.enums import ConversationState, LeadType
 from app.domain.messaging import OutboundMessage, TurnResult
@@ -90,11 +91,16 @@ async def handle_discovery(ctx: TurnContext) -> TurnResult:
     result = TurnResult()
     result.add(OutboundMessage(text=answer))
 
-    # Offer the call once they have actually engaged - a callback offered on the
-    # first reply, before we know anything, converts badly and reads as a
-    # brush-off. `should_nudge` fires once per conversation.
-    if ctx.bump_qna_count() >= ctx.deps.settings.qna_nudge_threshold and ctx.should_nudge():
-        ctx.mark_nudged()
+    # Once they have actually engaged, close. The discount is the stronger move
+    # than a bare "shall someone call you?" - it gives a reason to act now and
+    # still carries the counselor button - so it takes priority when live, and
+    # the plain callback offer is the fallback when it is switched off or has
+    # already been shown.
+    ctx.bump_qna_count()
+    closing = maybe_offer(ctx, force=wants_to_buy(ctx.text))
+    if closing is not None:
+        result.replies.extend(closing.replies)
+    elif ctx.should_nudge_callback():
         result.replies.extend(
             offer_callback(ctx, resume_state=ConversationState.DISCOVERY).replies
         )

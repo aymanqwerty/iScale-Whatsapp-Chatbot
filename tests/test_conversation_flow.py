@@ -853,3 +853,136 @@ async def test_the_booked_time_is_shown_in_business_timezone(
 
     assert "4 PM" in harness.texts(replies)
     assert "10:30" not in harness.texts(replies)
+
+
+# --------------------------------------------------------------------------- #
+# Discovery regressions (both observed in production, 10 Aug 2026)
+# --------------------------------------------------------------------------- #
+async def test_discovery_survives_the_callback_nudge(harness: Harness) -> None:
+    """Observed: the third discovery message returned the error copy.
+
+    `handle_discovery` called `ctx.should_nudge()`, which does not exist - the
+    method is `should_nudge_callback`. Nothing caught it because no test drove
+    discovery past the nudge threshold, so the branch that fires once every
+    three messages was never executed.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+
+    for message in ("i am a student", "you tell me", "okay", "what happened"):
+        replies = await harness.say(message)
+        assert replies, f"{message!r} produced no reply at all"
+        for reply in replies:
+            assert "went wrong" not in reply.text, f"{message!r} crashed the turn"
+
+
+async def test_stating_a_profession_is_never_refused(harness: Harness) -> None:
+    """Observed: "i am a doctor how it can help" hit the off-topic refusal.
+
+    The guard blocks `doctor` to stop medical-advice requests, but discovery
+    opens by asking what the user does - so the single most valuable answer it
+    can receive was being rejected.
+    """
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+
+    for profession in (
+        "i am a doctor how it can help",
+        "i am a lawyer",
+        "i work in politics",
+        "i run a restaurant",
+    ):
+        replies = await harness.say(profession)
+        joined = harness.texts(replies)
+        assert "I can only help with questions about iScale" not in joined, (
+            f"{profession!r} was refused as off topic"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# The chatbot-exclusive discount
+# --------------------------------------------------------------------------- #
+async def test_discount_is_offered_once_engagement_is_real(harness: Harness) -> None:
+    """The close comes after a conversation, not as an opening move."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    replies = await harness.say(reply_id=copy.COURSE_UNSURE)
+    assert "BOT32" not in harness.texts(replies), "offered before any engagement"
+
+    seen = ""
+    for message in ("i am a doctor", "tell me more", "okay what else"):
+        seen += harness.texts(await harness.say(message))
+
+    assert "BOT32" in seen, "the discount was never offered"
+    assert "3,399" in seen and "4,999" in seen
+    assert "theiscale.com" in seen
+
+
+async def test_discount_is_never_repeated(harness: Harness) -> None:
+    """A coupon repeated every few messages reads as pressure, not a favour."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+
+    seen = ""
+    for message in ("i am a doctor", "tell me more", "okay", "and what else", "hmm"):
+        seen += harness.texts(await harness.say(message))
+
+    assert seen.count("BOT32") == 1, f"offered {seen.count('BOT32')} times"
+
+
+async def test_asking_how_to_join_offers_the_discount_immediately(
+    harness: Harness,
+) -> None:
+    """An explicit buying signal should not have to wait for a question quota."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+
+    replies = await harness.say("i am a student, how do i join this course")
+
+    assert "BOT32" in harness.texts(replies)
+
+
+async def test_the_offer_always_keeps_the_counselor_route(harness: Harness) -> None:
+    """A discount must not remove the human option - plenty will not self-serve."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+    replies = await harness.say("i am a doctor, how do i join")
+
+    offer = next(r for r in replies if "BOT32" in r.text)
+    ids = {oid for oid, _ in offer.options}
+    assert copy.MENU_COUNSELOR in ids, "no way to reach a human from the offer"
+
+    await harness.say(reply_id=copy.MENU_COUNSELOR)
+    assert await harness.state() in ("ASK_NAME", "ASK_PHONE", "ASK_CALLBACK_TIME")
+
+
+async def test_post_sales_never_sees_a_course_discount(harness: Harness) -> None:
+    """Dangling a course coupon at someone chasing a broken video is tone deaf."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_ENROLLED)
+    await harness.say(reply_id=copy.ENROLLED_PAID)
+    await harness.say(reply_id=f"{copy.SUPPORT_PREFIX}video")
+
+    seen = ""
+    for message in ("videos not playing", "still broken", "please help"):
+        seen += harness.texts(await harness.say(message))
+
+    assert "BOT32" not in seen
+
+
+async def test_the_coupon_is_never_visible_to_the_model(harness: Harness) -> None:
+    """The offer is machine-rendered; a paraphrased coupon is a wrong coupon."""
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    await harness.say(reply_id=copy.COURSE_UNSURE)
+    for message in ("i am a doctor", "tell me more", "is there any discount"):
+        await harness.say(message)
+
+    for call in harness.llm.calls:
+        blob = call["system_prompt"] + call["user_prompt"]
+        assert "BOT32" not in blob, "the coupon reached the model"
