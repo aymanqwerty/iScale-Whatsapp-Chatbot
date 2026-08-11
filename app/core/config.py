@@ -144,6 +144,23 @@ class Settings(BaseSettings):
     #: catches genuine redeliveries. Set to 0 to disable the check.
     webhook_max_message_age_seconds: int = 900
 
+    # --- Inactivity follow-up ----------------------------------------------
+    #: One check-in when a conversation goes quiet mid-flow, then the chat is
+    #: closed so the next message starts fresh. Never sent to someone who
+    #: finished (a booking completed, or they said goodbye), to a conversation a
+    #: human has taken over, or twice to anyone.
+    inactivity_enabled: bool = True
+    #: Silence before the follow-up. Below about ten minutes this interrupts
+    #: people who are simply reading or comparing courses in another tab.
+    inactivity_minutes: int = 15
+    #: How often the sweeper looks. A minute is far finer than the 15-minute
+    #: threshold needs, and costs one indexed query.
+    inactivity_sweep_seconds: int = 60
+    #: WhatsApp refuses free-text outside 24 hours of the customer's last
+    #: message, so anyone quieter than this is unreachable and is skipped rather
+    #: than attempted and logged as a failure.
+    inactivity_max_age_hours: int = 23
+
     rate_limit_enabled: bool = True
     #: Messages one sender may have processed per window. Each one costs an LLM
     #: call, so this is a spend control as much as an abuse control.

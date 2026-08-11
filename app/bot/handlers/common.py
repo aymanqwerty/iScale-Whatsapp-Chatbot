@@ -94,13 +94,30 @@ async def answer_with_optional_nudge(ctx: TurnContext) -> TurnResult:
         result.replies.extend(closing.replies)
         return result
 
-    if ctx.should_nudge_callback():
+    if ctx.should_nudge_callback() and not await _already_booked(ctx):
         ctx.mark_nudged()
         ctx.conversation.set_ctx(CTX_RETURN_STATE, str(resume_state))
         result.add(_callback_offer(ctx))
         ctx.conversation.current_state = ConversationState.ASK_CALLBACK
 
     return result
+
+
+async def _already_booked(ctx: TurnContext) -> bool:
+    """Whether this number already has a call on the counselor's list.
+
+    Observed in production: someone booked a call, said "thanks", and was
+    immediately asked whether they would like a call. Offering again reads as
+    though the booking did not register - the one thing a person most wants
+    reassurance about straight after making it.
+
+    Costs a query only when the nudge would otherwise fire, which is once per
+    conversation at most.
+    """
+    existing = await ctx.deps.lead_repository.find_upcoming_callback(
+        ctx.user.phone, now=ctx.deps.callback_validator.now()
+    )
+    return existing is not None
 
 
 def _callback_offer(ctx: TurnContext) -> OutboundMessage:

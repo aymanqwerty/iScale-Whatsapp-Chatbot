@@ -440,6 +440,38 @@ OFFER_QUESTION_PROMPT = (
     "how the classes work, or what you'd actually be able to build."
 )
 
+#: The one follow-up when a conversation goes quiet. Both versions close the
+#: chat in the same breath, so the message is never a hook for another message -
+#: it says what is happening and leaves the door open.
+#:
+#: The booking version names what was left unfinished. Someone who stopped
+#: halfway through giving their details is the most recoverable lead in the
+#: funnel, and "are you still there?" wastes that.
+INACTIVITY_BOOKING = (
+    "{greeting}! 👋 I haven't heard back, so I'll pause here for now.\n\n"
+    "We were partway through booking your call — if you'd still like one, just "
+    "message me and we'll pick up right where we left off. 😊"
+)
+
+INACTIVITY_GENERAL = (
+    "{greeting}! 👋 I haven't heard from you in a little while, so I'll close "
+    "this chat for now.\n\n"
+    "Anything you need later — courses, fees, or a call with a counselor — just "
+    "message me and I'll be right here. 😊"
+)
+
+
+#: Replies to a sign-off. One short line, no menu, no model call - the point is
+#: to let the conversation end gracefully instead of restarting it. Varied only
+#: by whether we know their name; anything more elaborate would itself be noise.
+def farewell(name: str | None = None) -> str:
+    who = f", {name.split()[0]}" if name else ""
+    return (
+        f"Anytime{who}! 😊 I'm right here if anything else comes up — "
+        "just message me."
+    )
+
+
 ASK_CALLBACK_PRE_SALES = (
     "Would you like one of our counselors to call you? "
     "They can walk you through the fees, batches and anything else in detail."
