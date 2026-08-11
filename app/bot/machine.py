@@ -158,7 +158,9 @@ class ConversationMachine:
         the first attempt had failed. Sending a counselor to ring the same
         person twice wastes their time and looks careless, so we ask.
         """
-        existing = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+        existing = await ctx.deps.lead_repository.find_upcoming_callback(
+        ctx.user.phone, now=ctx.deps.callback_validator.now()
+    )
         if existing is None:
             return start_callback_capture(ctx, lead_type=lead_type)
 

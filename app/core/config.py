@@ -55,6 +55,26 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 20
 
+    # --- LLM provider ------------------------------------------------------
+    #: Which model backend answers questions. Both clients implement the same
+    #: `LLMClient` protocol, so switching is an environment variable and a
+    #: restart - no redeploy of different code, and no way for the two to drift
+    #: apart in behaviour.
+    llm_provider: Literal["gemini", "groq"] = "gemini"
+
+    # --- Gemini (LLM) ------------------------------------------------------
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_temperature: float = 0.3
+    gemini_max_output_tokens: int = 512
+    gemini_timeout_seconds: float = 20.0
+    #: Thinking tokens are billed as output and are ON by default. Measured on a
+    #: one-line reply: 174 of 206 tokens were thinking - four times the quota for
+    #: an answer already grounded by the knowledge section. 0 disables it;
+    #: -1 leaves Google's default in place.
+    gemini_thinking_budget: int = 0
+
     # --- Groq (LLM) --------------------------------------------------------
     groq_api_key: SecretStr = SecretStr("")
     groq_base_url: str = "https://api.groq.com/openai/v1"

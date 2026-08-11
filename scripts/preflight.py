@@ -19,6 +19,7 @@ import hashlib
 import hmac
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -85,8 +86,20 @@ def check_knowledge() -> None:
 
 
 def check_llm() -> None:
-    section("Groq")
+    """Probe whichever provider is actually configured.
+
+    Always checking Groq would have passed happily while Gemini answered every
+    real message - a green preflight for a backend nobody is using.
+    """
     s = get_settings()
+    if s.llm_provider == "groq":
+        _check_groq(s)
+    else:
+        _check_gemini(s)
+
+
+def _check_groq(s: Any) -> None:
+    section("Groq")
     if not s.groq_api_key.get_secret_value():
         fail("GROQ_API_KEY is empty", "the bot cannot answer questions")
         return
@@ -107,6 +120,43 @@ def check_llm() -> None:
         fail("Groq rejected the API key")
     else:
         fail(f"Groq returned {r.status_code}: {r.text[:120]}")
+
+
+def _check_gemini(s: Any) -> None:
+    section("Gemini")
+    key = s.gemini_api_key.get_secret_value()
+    if not key:
+        fail("GEMINI_API_KEY is empty", "the bot cannot answer questions")
+        return
+    try:
+        r = httpx.post(
+            f"{s.gemini_base_url.rstrip('/')}/models/{s.gemini_model}:generateContent",
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json={
+                "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+                "generationConfig": {"maxOutputTokens": 1, "thinkingConfig": {"thinkingBudget": 0}},
+            },
+            timeout=20,
+        )
+    except Exception as exc:
+        fail(f"cannot reach Gemini: {exc}")
+        return
+
+    if r.status_code == 200:
+        ok(f"reachable, model {s.gemini_model} responded")
+        if s.gemini_thinking_budget != 0:
+            warn(
+                f"GEMINI_THINKING_BUDGET={s.gemini_thinking_budget}",
+                "thinking tokens bill as output - roughly 4x the quota per reply",
+            )
+    elif r.status_code in (401, 403):
+        fail("Gemini rejected the API key")
+    elif r.status_code == 404:
+        fail(f"model {s.gemini_model} not found for this key")
+    elif r.status_code == 429:
+        fail("Gemini quota exhausted", "answers will fall back to the canned reply")
+    else:
+        fail(f"Gemini returned {r.status_code}: {r.text[:140]}")
 
 
 def check_whatsapp() -> None:

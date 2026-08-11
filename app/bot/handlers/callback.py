@@ -461,7 +461,9 @@ async def start_reschedule(ctx: TurnContext) -> TurnResult:
     booking almost always happened in an earlier, now-closed conversation.
     """
     result = TurnResult()
-    lead = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+    lead = await ctx.deps.lead_repository.find_upcoming_callback(
+        ctx.user.phone, now=ctx.deps.callback_validator.now()
+    )
 
     if lead is None:
         # Nothing to move - treat it as a normal request for a call.
@@ -489,13 +491,17 @@ async def handle_confirm_reschedule(ctx: TurnContext) -> TurnResult:
         return result
 
     if reply_id == copy.RESCHEDULE_MOVE or intents.is_affirmative(ctx.text):
-        lead = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+        lead = await ctx.deps.lead_repository.find_upcoming_callback(
+        ctx.user.phone, now=ctx.deps.callback_validator.now()
+    )
         if lead is not None:
             return _ask_for_the_new_time(ctx, lead)
 
     # Anything else: re-ask rather than guess which they meant.
     result = TurnResult()
-    lead = await ctx.deps.lead_repository.find_upcoming_callback(ctx.user.phone)
+    lead = await ctx.deps.lead_repository.find_upcoming_callback(
+        ctx.user.phone, now=ctx.deps.callback_validator.now()
+    )
     when = describe_slot(lead, ctx.deps.settings.tz) if lead else "your call"
     result.add(copy.reschedule_choice(when))
     return result
