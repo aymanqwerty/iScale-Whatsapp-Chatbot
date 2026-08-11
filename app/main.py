@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import __version__
@@ -72,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    _register_cors(app, settings)
     _register_middleware(app)
     _register_exception_handlers(app)
 
@@ -88,6 +90,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }
 
     return app
+
+
+def _register_cors(app: FastAPI, settings: Settings) -> None:
+    """Allow a separately hosted console to call the API with credentials.
+
+    An explicit allow-list, never "*". These endpoints return every customer
+    transcript and phone number we hold; a wildcard with credentials is both
+    refused by browsers and wrong on the merits. Nothing is registered at all
+    when no external origin is configured, so a same-origin deployment gains no
+    new surface.
+    """
+    origins = settings.console_origins
+    if not origins:
+        return
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+        max_age=600,
+    )
+    logger.info("CORS enabled for the console", extra={"origins": origins})
 
 
 def _register_middleware(app: FastAPI) -> None:
