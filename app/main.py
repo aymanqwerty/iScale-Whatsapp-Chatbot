@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.api.v1 import api_router
 from app.container import Container
+from app.services.inactivity import InactivitySweeper
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AppError
 from app.core.logging import configure_logging, correlation_id_var, get_logger
@@ -37,9 +38,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "courses": len(container.knowledge_base.courses),
         },
     )
+    # Started after the container so it shares the same database and messaging
+    # client, and stopped first on shutdown so a sweep cannot outlive the
+    # connection pool it is using.
+    sweeper = InactivitySweeper(
+        database=container.database,
+        messaging=container.messaging,
+        settings=settings,
+    )
+    sweeper.start()
+    app.state.sweeper = sweeper
+
     try:
         yield
     finally:
+        await sweeper.stop()
         await container.shutdown()
         logger.info("Application stopped")
 

@@ -367,6 +367,51 @@ def asks_about_price(text: str) -> bool:
     return any(phrase in cleaned for phrase in _PRICE_PHRASES)
 
 
+#: Sign-offs and acknowledgements - the end of a conversation, not the start of
+#: one. Observed in production: "Have a great day" after a completed booking was
+#: answered with a full welcome, an LLM reply and the main menu, three messages
+#: to someone who was saying goodbye.
+_CLOSING_WORDS = frozenset(
+    """
+    ok okay okey k kk fine cool great nice good perfect done thanks thank thanku
+    thankyou thx ty bye goodbye tata alright allright sure noted got understood
+    welcome cheers regards shukriya dhanyavad theek thik acha accha achha hmm hm
+    """.split()
+)
+
+_CLOSING_PHRASES = (
+    "thank you", "thanks a lot", "many thanks", "have a great day",
+    "have a good day", "have a nice day", "you too", "u too", "same to you",
+    "see you", "talk later", "catch you later", "good night", "goodnight",
+    "no thanks", "nothing else", "that's all", "thats all", "all good",
+    "got it", "understood", "will do", "sounds good", "ok thanks", "okay thanks",
+    "dhanyavad", "shukriya", "theek hai", "thik hai", "chalo",
+)
+
+#: Beyond this it is a sentence, not a sign-off. "ok but what about the fees"
+#: must reach the model; "ok thanks" must not.
+_MAX_CLOSING_WORDS = 4
+
+
+def is_closing_remark(text: str) -> bool:
+    """Whether the user is winding the conversation down rather than asking.
+
+    Deliberately narrow, and length-capped: a false positive answers a real
+    question with "glad I could help", which is far worse than an unnecessary
+    reply. Emoji-only messages count - a lone thumbs-up is an acknowledgement.
+    """
+    cleaned = normalize(text)
+    if not cleaned:
+        # Emoji strip to nothing under `normalize`; a bare 👍 is a sign-off.
+        return bool(text.strip())
+    if any(phrase in cleaned for phrase in _CLOSING_PHRASES):
+        return True
+    words = cleaned.split()
+    if len(words) > _MAX_CLOSING_WORDS:
+        return False
+    return all(word in _CLOSING_WORDS for word in words)
+
+
 def means_undecided(text: str) -> bool:
     """Whether the user is saying they do not know which course they want.
 

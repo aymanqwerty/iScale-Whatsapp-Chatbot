@@ -20,6 +20,17 @@ async def handle_start(ctx: TurnContext) -> TurnResult:
     the menu - it falls through to MAIN_MENU, which answers it.
     """
     result = TurnResult()
+
+    # A sign-off is the end of something, not the start. Observed in production:
+    # "Have a great day" after a completed booking produced a full welcome, an
+    # LLM reply and the main menu - three messages at someone saying goodbye,
+    # and one of them offered a callback to a person who had just booked one.
+    # Answered here, before the state is advanced, so nothing else fires.
+    if intents.is_closing_remark(ctx.text):
+        ctx.conversation.current_state = ConversationState.END
+        result.add(OutboundMessage(text=copy.farewell(ctx.user.name)))
+        return result
+
     ctx.conversation.current_state = ConversationState.MAIN_MENU
 
     if intents.is_greeting(ctx.text) or not ctx.text:
@@ -28,8 +39,11 @@ async def handle_start(ctx: TurnContext) -> TurnResult:
         )
         return result
 
-    # Anything more substantial than "hi": welcome briefly, then deal with it.
-    result.add(copy.welcome_message(ctx.company, returning_name=ctx.user.name))
+    # Anything more substantial than "hi" is dealt with directly, WITHOUT a
+    # welcome in front of it. The welcome answers a greeting; prefixing it to a
+    # specific question re-introduces the bot to someone it was talking to a
+    # minute ago, which is how "what is the fees" became three messages after a
+    # completed booking. Saying "hi" still brings the menu back.
     follow_up = await handle_main_menu(ctx)
     result.replies.extend(follow_up.replies)
     result.lead_id = follow_up.lead_id
@@ -88,10 +102,14 @@ async def handle_main_menu(ctx: TurnContext) -> TurnResult:
         return result
 
     # A real question typed at the menu: answer it rather than nagging for a tap.
+    #
+    # The answer alone, with no menu appended. Someone who typed a question has
+    # already shown they do not want to tap through options, and the menu is one
+    # word ("menu") away at any moment. Sending it after every answer was what
+    # made a two-message exchange read as three.
     conversation.current_state = ConversationState.GENERAL_QNA
     conversation.lead_type = conversation.lead_type or LeadType.PRE_SALES
     answer = await answer_question(ctx)
     ctx.bump_qna_count()
     result.add(OutboundMessage(text=answer))
-    result.add(copy.main_menu("Anything else I can help with?"))
     return result
