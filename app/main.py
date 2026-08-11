@@ -102,18 +102,26 @@ def _register_cors(app: FastAPI, settings: Settings) -> None:
     new surface.
     """
     origins = settings.console_origins
-    if not origins:
+    pattern = settings.console_origin_regex
+    if not origins and not pattern:
         return
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
+        allow_origin_regex=pattern,
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
         max_age=600,
     )
-    logger.info("CORS enabled for the console", extra={"origins": origins})
+    # Logged as parsed, not as configured. A missing scheme or a stray trailing
+    # slash blocks every request before it reaches the server, so the logs would
+    # otherwise be silent about the one thing that is wrong.
+    logger.info(
+        "CORS enabled for the console",
+        extra={"origins": origins, "origin_regex": pattern},
+    )
 
 
 def _register_middleware(app: FastAPI) -> None:
