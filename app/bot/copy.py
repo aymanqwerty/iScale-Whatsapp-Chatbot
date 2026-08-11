@@ -440,24 +440,40 @@ OFFER_QUESTION_PROMPT = (
     "how the classes work, or what you'd actually be able to build."
 )
 
-#: The one follow-up when a conversation goes quiet. Both versions close the
-#: chat in the same breath, so the message is never a hook for another message -
-#: it says what is happening and leaves the door open.
+#: Two nudges when a conversation goes quiet: one after an hour, one six hours
+#: after that. Neither ends anything - the conversation stays exactly where it
+#: was, so replying "yes" an hour later continues the same thread rather than
+#: starting a new one.
 #:
-#: The booking version names what was left unfinished. Someone who stopped
+#: Nothing here says "closing", "resolving" or "ending". The whole point is to
+#: get someone back, and telling them the door has shut does the opposite.
+#:
+#: The booking versions name what was left unfinished. Someone who stopped
 #: halfway through giving their details is the most recoverable lead in the
-#: funnel, and "are you still there?" wastes that.
+#: funnel, and a generic "are you still there?" wastes that.
 INACTIVITY_BOOKING = (
-    "{greeting}! 👋 I haven't heard back, so I'll pause here for now.\n\n"
-    "We were partway through booking your call — if you'd still like one, just "
-    "message me and we'll pick up right where we left off. 😊"
+    "{greeting}! 👋 Looks like life got busy — totally fair.\n\n"
+    "We were *this* close to getting your call booked. Want to finish it off? "
+    "It'll take about ten seconds. 😄"
 )
 
 INACTIVITY_GENERAL = (
-    "{greeting}! 👋 I haven't heard from you in a little while, so I'll close "
-    "this chat for now.\n\n"
-    "Anything you need later — courses, fees, or a call with a counselor — just "
-    "message me and I'll be right here. 😊"
+    "{greeting}! 👋 You went quiet on me — busy day?\n\n"
+    "No rush at all. Whenever you're free, just pick up right where we left "
+    "off and I'll be here. 😊"
+)
+
+INACTIVITY_BOOKING_LAST = (
+    "{greeting}! 😄 Me again — last nudge, promise.\n\n"
+    "Your call is still half-booked and I'd hate for it to go to waste. "
+    "Say the word and we'll finish it in seconds — or ignore me and I'll stop "
+    "bothering you. 🙈"
+)
+
+INACTIVITY_GENERAL_LAST = (
+    "{greeting}! 😄 Just checking in one last time.\n\n"
+    "Still happy to help with courses, fees or a call with a counselor — "
+    "whenever suits you. I'll leave you be now, but I'm one message away. 👋"
 )
 
 
