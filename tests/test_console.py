@@ -528,7 +528,9 @@ def test_a_bare_host_is_upgraded_to_https(tmp_path: Path) -> None:
         console_allowed_origins="console.vercel.app, https://other.example.com/",
     )
 
-    assert settings.console_origins == [
+    # Only what was configured; the dev-server entries are appended separately
+    # and must not be mistaken for operator intent.
+    assert settings.configured_console_origins == [
         "https://console.vercel.app",
         "https://other.example.com",
     ]
@@ -572,3 +574,51 @@ def test_preview_deployments_can_be_matched_by_pattern(tmp_path: Path) -> None:
             stranger.headers.get("access-control-allow-origin")
             != "https://someone-else.vercel.app"
         )
+
+
+def test_the_vite_dev_server_is_allowed_outside_production(tmp_path: Path) -> None:
+    """Running the console locally against a deployed backend is normal work.
+
+    Requiring an env var for it means every developer meets an opaque CORS
+    error before they can start.
+    """
+    settings = _settings(
+        tmp_path / "dev.db",
+        environment="local",
+        console_enabled=True,
+        console_username="iScale-user",
+        console_password_hash=hash_password(PASSWORD),
+        console_session_secret="s",
+    )
+
+    assert "http://localhost:5173" in settings.console_origins
+    assert "http://127.0.0.1:5173" in settings.console_origins
+
+    with TestClient(create_app(settings)) as client:
+        response = client.options(
+            f"{BASE}/api/login",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert (
+            response.headers.get("access-control-allow-origin")
+            == "http://localhost:5173"
+        )
+
+
+def test_localhost_is_not_allowed_in_production(tmp_path: Path) -> None:
+    """A convenience for development must not become a hole in production."""
+    settings = _settings(
+        tmp_path / "prod.db",
+        environment="production",
+        console_enabled=True,
+        console_username="iScale-user",
+        console_password_hash=hash_password(PASSWORD),
+        console_session_secret="s",
+        console_allowed_origins="https://console.vercel.app",
+        api_key="required-in-production",
+    )
+
+    assert settings.console_origins == ["https://console.vercel.app"]

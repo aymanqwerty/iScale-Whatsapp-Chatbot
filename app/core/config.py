@@ -20,6 +20,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR: Path = Path(__file__).resolve().parents[2]
 
+#: Vite's dev server, on both hostnames a browser might use. Allowed outside
+#: production so `npm run dev` against a deployed backend just works.
+_LOCAL_CONSOLE_ORIGINS: tuple[str, ...] = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
+
 _WEEKDAY_NAMES: dict[str, int] = {
     "monday": 0,
     "tuesday": 1,
@@ -294,13 +301,40 @@ class Settings(BaseSettings):
         log in. Accepting the shorter form costs nothing and removes an entire
         class of afternoon.
         """
+        origins = list(self.configured_console_origins)
+
+        # The Vite dev server, allowed automatically outside production. Running
+        # the console locally against a deployed backend is the normal way to
+        # work on it, and requiring an env var for that means every developer
+        # meets an opaque CORS error before they can start. Never added in
+        # production, where the frontend is served from a real domain.
+        #
+        # Deliberately kept OUT of `console_cross_origin`: this is a CORS
+        # convenience, and letting it also relax the session cookie to
+        # SameSite=None would weaken every local and test deployment for the
+        # sake of a dev server.
+        if not self.is_production:
+            for dev in _LOCAL_CONSOLE_ORIGINS:
+                if dev not in origins:
+                    origins.append(dev)
+        return origins
+
+    @property
+    def configured_console_origins(self) -> list[str]:
+        """Only what the operator actually set, normalised."""
         origins: list[str] = []
         for raw in self.console_allowed_origins.split(","):
             origin = raw.strip().rstrip("/")
             if not origin:
                 continue
             if "://" not in origin:
-                origin = f"https://{origin}"
+                # localhost is http in practice; anything deployed is https.
+                scheme = (
+                    "http"
+                    if origin.startswith(("localhost", "127.0.0.1"))
+                    else "https"
+                )
+                origin = f"{scheme}://{origin}"
             origins.append(origin)
         return origins
 
@@ -326,7 +360,7 @@ class Settings(BaseSettings):
         same-origin deployment is never loosened for a frontend that does not
         exist.
         """
-        return bool(self.console_origins or self.console_origin_regex)
+        return bool(self.configured_console_origins or self.console_origin_regex)
 
     @property
     def console_ready(self) -> bool:
