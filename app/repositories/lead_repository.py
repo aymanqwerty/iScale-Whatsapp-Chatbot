@@ -103,12 +103,21 @@ class LeadRepository:
         await self._session.flush()
         return lead
 
-    async def find_upcoming_callback(self, phone: str) -> Lead | None:
+    async def find_upcoming_callback(
+        self, phone: str, *, now: datetime | None = None
+    ) -> Lead | None:
         """The most recent still-open callback booked for this number.
 
         "Open" means a counselor has not yet worked it (`NEW`) and the slot has
         not already passed. A lead that is CONTACTED or in the past is history:
         rescheduling it would rewrite a call that already happened.
+
+        `now` comes from the same clock that validated the booking. Reading the
+        system clock here instead meant the two could disagree: the validator
+        accepted a slot as future while this query judged it past, so "reschedule
+        my call" answered "I can't find an upcoming call" for a booking made
+        moments earlier. Production passes the real clock either way; the
+        difference is that the two now cannot drift apart.
         """
         result = await self._session.execute(
             select(Lead)
@@ -116,7 +125,7 @@ class LeadRepository:
                 Lead.phone == phone,
                 Lead.status == LeadStatus.NEW,
                 Lead.preferred_time.is_not(None),
-                Lead.preferred_time >= datetime.now(UTC),
+                Lead.preferred_time >= (now or datetime.now(UTC)),
             )
             .order_by(Lead.preferred_time.asc())
             .limit(1)

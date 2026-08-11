@@ -24,6 +24,7 @@ from app.services.knowledge.retriever import KnowledgeRetriever, build_retriever
 from app.services.lead_service import LeadSyncService
 from app.services.llm.answer_service import AnswerService
 from app.services.llm.base import LLMClient
+from app.services.llm.gemini import GeminiClient
 from app.services.llm.groq import GroqClient
 from app.services.scheduling.callback_time import CallbackTimeValidator
 from app.services.whatsapp.allowlist import PhoneAllowlist
@@ -74,7 +75,20 @@ class Container:
             max_chars=settings.knowledge_max_chars,
         )
 
-        llm: LLMClient = GroqClient(settings)
+        # Both clients satisfy `LLMClient`, so the provider is a configuration
+        # choice rather than a code path. Logged at startup because "which model
+        # is actually answering?" is the first question when replies change
+        # character, and guessing from the logs is otherwise impossible.
+        if settings.llm_provider == "groq":
+            llm: LLMClient = GroqClient(settings)
+            model = settings.groq_model
+        else:
+            llm = GeminiClient(settings)
+            model = settings.gemini_model
+        logger.info(
+            "LLM provider selected",
+            extra={"provider": settings.llm_provider, "model": model},
+        )
         answer_service = AnswerService(
             llm=llm, retriever=retriever, knowledge_base=knowledge_base
         )

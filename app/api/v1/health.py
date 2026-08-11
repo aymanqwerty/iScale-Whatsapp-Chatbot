@@ -57,7 +57,10 @@ async def readiness(container: ContainerDep, response: Response) -> dict[str, An
         "snippets": len(container.knowledge_base),
         "courses": len(container.knowledge_base.courses),
     }
-    checks["groq"] = "ok" if await container.llm.health_check() else "unconfigured"
+    # Keyed by provider, not hard-coded: a readiness probe that always says
+    # "groq" while Gemini is answering is worse than no probe at all.
+    provider = container.settings.llm_provider
+    checks[provider] = "ok" if await container.llm.health_check() else "unconfigured"
     checks["whatsapp"] = "enabled" if container.settings.whatsapp_enabled else "disabled"
     checks["lead_sink"] = {
         "name": container.lead_sink.name,
