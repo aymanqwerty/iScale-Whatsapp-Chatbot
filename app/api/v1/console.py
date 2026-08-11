@@ -64,13 +64,30 @@ def _require_enabled(settings: SettingsDep) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
+def _token_from(request: Request) -> str:
+    """The session token from either transport.
+
+    Two are supported on purpose. The cookie is the safer mechanism - httpOnly,
+    so script cannot read it - and is what a same-origin page uses. But a
+    separately hosted SPA makes that cookie third-party, and Safari and Brave
+    block those outright, so the React console sends the same signed token in an
+    Authorization header instead. Same token, same signature, same expiry;
+    only the transport differs.
+    """
+    header = request.headers.get("Authorization", "")
+    if header.lower().startswith("bearer "):
+        return header[7:].strip()
+    return request.cookies.get(COOKIE_NAME, "")
+
+
 async def require_console_session(
     request: Request, settings: SettingsDep
 ) -> str:
-    """Username from the session cookie, or 401."""
+    """Username from the session cookie or bearer token, or 401."""
     _require_enabled(settings)
-    token = request.cookies.get(COOKIE_NAME, "")
-    username = read_session(token, settings.console_session_secret.get_secret_value())
+    username = read_session(
+        _token_from(request), settings.console_session_secret.get_secret_value()
+    )
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in"
@@ -135,7 +152,7 @@ class LoginRequest(BaseModel):
 @router.post("/api/login", summary="Sign in to the console")
 async def login(
     payload: LoginRequest, response: Response, settings: SettingsDep
-) -> dict[str, str]:
+) -> dict[str, Any]:
     _require_enabled(settings)
 
     # scrypt is deliberately slow (~1s, more on a small instance) and blocks the
@@ -160,17 +177,29 @@ async def login(
     token = issue_session(
         settings.console_username, settings.console_session_secret.get_secret_value()
     )
+    # A cross-origin frontend needs SameSite=None, which browsers only honour on
+    # a Secure cookie. Kept at "lax" otherwise: a same-origin deployment should
+    # not be loosened for a frontend that does not exist.
+    cross_origin = settings.console_cross_origin
     response.set_cookie(
         COOKIE_NAME,
         token,
         max_age=SESSION_TTL_SECONDS,
         httponly=True,  # unreadable from JavaScript, so XSS cannot steal it
-        samesite="lax",
-        secure=settings.is_production,  # HTTPS-only once deployed
+        samesite="none" if cross_origin else "lax",
+        secure=cross_origin or settings.is_production,
         path="/",
     )
     logger.info("Console login succeeded", extra={"username": settings.console_username})
-    return {"status": "ok", "username": settings.console_username}
+    # The token is returned as well as set. A separately hosted SPA cannot rely
+    # on the cookie - Safari and Brave block third-party cookies - so it stores
+    # this and sends it as a bearer header. Same-origin callers can ignore it.
+    return {
+        "status": "ok",
+        "username": settings.console_username,
+        "token": token,
+        "expires_in": SESSION_TTL_SECONDS,
+    }
 
 
 @router.post("/api/logout", summary="Sign out")
@@ -414,8 +443,15 @@ async def stream(websocket: WebSocket) -> None:
         await websocket.close(code=1008)
         return
 
-    # Cookies are sent on the WebSocket handshake, so the same session applies.
-    token = websocket.cookies.get(COOKIE_NAME, "")
+    # A browser cannot set an Authorization header on a WebSocket handshake, so
+    # a cross-origin client passes the token as a query parameter instead. The
+    # cookie is still accepted for the same-origin console. The token is signed
+    # and short-lived either way; the risk of it appearing in a proxy log is
+    # accepted deliberately, because the alternative is no live updates at all
+    # for the hosted frontend.
+    token = websocket.query_params.get("token") or websocket.cookies.get(
+        COOKIE_NAME, ""
+    )
     if not read_session(token, settings.console_session_secret.get_secret_value()):
         await websocket.close(code=1008)
         return

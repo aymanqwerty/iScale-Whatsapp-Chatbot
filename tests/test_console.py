@@ -381,3 +381,132 @@ def test_the_list_carries_both_name_and_number(client: TestClient) -> None:
     assert row["phone"] == USER_PHONE
     assert "name" in row
     assert row["last_message"]
+
+
+# --------------------------------------------------------------------------- #
+# Cross-origin auth for the separately hosted React console
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def cors_client(tmp_path: Path) -> Iterator[TestClient]:
+    """A backend configured for a frontend on another origin."""
+    settings = _settings(
+        tmp_path / "cors.db",
+        console_enabled=True,
+        console_username="iScale-user",
+        console_password_hash=hash_password(PASSWORD),
+        console_session_secret="test-signing-secret",
+        console_allowed_origins="https://console.example.com,http://localhost:5173",
+    )
+    app = create_app(settings)
+    with TestClient(app) as test_client:
+        container = app.state.container
+        container.answer_service._llm = FakeLLM(reply="A grounded answer.")
+        container.callback_validator = FrozenClockValidator(settings)
+        yield test_client
+
+
+def test_login_returns_a_token_for_the_hosted_frontend(client: TestClient) -> None:
+    """Safari and Brave block third-party cookies, so the SPA needs the token."""
+    response = client.post(
+        f"{BASE}/api/login", json={"username": "iScale-user", "password": PASSWORD}
+    )
+
+    body = response.json()
+    assert body["token"], "no token for a cross-origin client to store"
+    assert body["expires_in"] > 0
+
+
+def test_a_bearer_token_authenticates_without_any_cookie(client: TestClient) -> None:
+    token = client.post(
+        f"{BASE}/api/login", json={"username": "iScale-user", "password": PASSWORD}
+    ).json()["token"]
+    client.cookies.clear()
+
+    response = client.get(
+        f"{BASE}/api/me", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "iScale-user"
+
+
+def test_a_forged_bearer_token_is_rejected(client: TestClient) -> None:
+    client.cookies.clear()
+
+    response = client.get(
+        f"{BASE}/api/me",
+        headers={"Authorization": "Bearer eyJ1IjoiaVNjYWxlLXVzZXIifQ.forged"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_the_websocket_accepts_a_token_query_parameter(client: TestClient) -> None:
+    """A browser cannot set an Authorization header on a WS handshake."""
+    token = client.post(
+        f"{BASE}/api/login", json={"username": "iScale-user", "password": PASSWORD}
+    ).json()["token"]
+    client.cookies.clear()
+
+    with client.websocket_connect(f"{BASE}/api/stream?token={token}") as ws:
+        _talk(client, "hi")
+        assert ws.receive_json()["type"] == "activity"
+
+
+def test_the_websocket_rejects_a_bad_token(client: TestClient) -> None:
+    from starlette.websockets import WebSocketDisconnect as WSDisconnect
+
+    client.cookies.clear()
+    with pytest.raises(WSDisconnect):
+        with client.websocket_connect(f"{BASE}/api/stream?token=nonsense"):
+            pass
+
+
+def test_an_allowed_origin_gets_cors_headers(cors_client: TestClient) -> None:
+    response = cors_client.options(
+        f"{BASE}/api/conversations",
+        headers={
+            "Origin": "https://console.example.com",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+
+    assert response.status_code in (200, 204)
+    assert response.headers["access-control-allow-origin"] == "https://console.example.com"
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
+def test_an_unknown_origin_is_not_allowed(cors_client: TestClient) -> None:
+    """These endpoints return every customer transcript we hold."""
+    response = cors_client.get(
+        f"{BASE}/api/conversations", headers={"Origin": "https://evil.example.com"}
+    )
+
+    assert response.headers.get("access-control-allow-origin") != "https://evil.example.com"
+
+
+def test_cors_is_absent_when_no_origin_is_configured(client: TestClient) -> None:
+    """A same-origin deployment must gain no new surface."""
+    response = client.get(
+        f"{BASE}/api/conversations", headers={"Origin": "https://anything.example.com"}
+    )
+
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_the_cookie_relaxes_only_when_a_frontend_is_hosted_elsewhere(
+    client: TestClient, cors_client: TestClient
+) -> None:
+    """SameSite=None is required cross-origin and needlessly loose otherwise."""
+    same = client.post(
+        f"{BASE}/api/login", json={"username": "iScale-user", "password": PASSWORD}
+    )
+    cross = cors_client.post(
+        f"{BASE}/api/login", json={"username": "iScale-user", "password": PASSWORD}
+    )
+
+    assert "samesite=lax" in same.headers["set-cookie"].lower()
+    cross_cookie = cross.headers["set-cookie"].lower()
+    assert "samesite=none" in cross_cookie
+    assert "secure" in cross_cookie, "SameSite=None is ignored without Secure"

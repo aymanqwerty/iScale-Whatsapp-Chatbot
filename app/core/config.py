@@ -128,9 +128,17 @@ class Settings(BaseSettings):
     #: database password - anyone who learns this must not thereby gain direct
     #: access to the leads table.
     console_password_hash: SecretStr = SecretStr("")
-    #: Signs the session cookie. Rotating it logs everyone out immediately,
+    #: Signs the session token. Rotating it logs everyone out immediately,
     #: which is the fastest revocation available.
     console_session_secret: SecretStr = SecretStr("")
+    #: Origins allowed to call the console API with credentials, comma
+    #: separated - e.g. "https://console.theiscale.com,http://localhost:5173".
+    #:
+    #: Only needed when the frontend is hosted somewhere other than this app.
+    #: Deliberately an explicit list and never "*": these endpoints return every
+    #: customer transcript, and a wildcard with credentials is both refused by
+    #: browsers and wrong in principle.
+    console_allowed_origins: str = ""
 
     #: Refuse to act on a message WhatsApp says was sent longer ago than this.
     #:
@@ -267,6 +275,26 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def console_origins(self) -> list[str]:
+        """Parsed `console_allowed_origins`, empty when same-origin only."""
+        return [
+            origin.strip().rstrip("/")
+            for origin in self.console_allowed_origins.split(",")
+            if origin.strip()
+        ]
+
+    @property
+    def console_cross_origin(self) -> bool:
+        """Whether a separately hosted frontend is expected.
+
+        Drives the cookie's SameSite policy: a cookie stays `lax` (the safer
+        default) until an external origin is actually configured, so a
+        same-origin deployment is never loosened for a frontend that does not
+        exist.
+        """
+        return bool(self.console_origins)
 
     @property
     def console_ready(self) -> bool:
