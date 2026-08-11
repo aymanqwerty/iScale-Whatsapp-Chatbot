@@ -139,6 +139,13 @@ class Settings(BaseSettings):
     #: customer transcript, and a wildcard with credentials is both refused by
     #: browsers and wrong in principle.
     console_allowed_origins: str = ""
+    #: Optional regex for origins that change on every deploy. Vercel names each
+    #: deployment `project-<hash>-team.vercel.app`, so an exact URL works once
+    #: and breaks on the next push. Example:
+    #:   ^https://i-scale-whatsapp-chatbot-[a-z0-9-]+\.vercel\.app$
+    #: Anchor it to your project prefix; a bare `.*\.vercel\.app` would let any
+    #: Vercel project in the world call this API with credentials.
+    console_allowed_origin_regex: str = ""
 
     #: Refuse to act on a message WhatsApp says was sent longer ago than this.
     #:
@@ -278,12 +285,37 @@ class Settings(BaseSettings):
 
     @property
     def console_origins(self) -> list[str]:
-        """Parsed `console_allowed_origins`, empty when same-origin only."""
-        return [
-            origin.strip().rstrip("/")
-            for origin in self.console_allowed_origins.split(",")
-            if origin.strip()
-        ]
+        """Parsed `console_allowed_origins`, empty when same-origin only.
+
+        A bare host is upgraded to `https://host`. Browsers always send the
+        scheme in the `Origin` header, so "example.vercel.app" matches nothing -
+        and the failure is completely silent: the request never reaches the
+        server, so the logs show nothing at all and the console simply cannot
+        log in. Accepting the shorter form costs nothing and removes an entire
+        class of afternoon.
+        """
+        origins: list[str] = []
+        for raw in self.console_allowed_origins.split(","):
+            origin = raw.strip().rstrip("/")
+            if not origin:
+                continue
+            if "://" not in origin:
+                origin = f"https://{origin}"
+            origins.append(origin)
+        return origins
+
+    @property
+    def console_origin_regex(self) -> str | None:
+        """Pattern matching Vercel preview deployments, when one is configured.
+
+        Vercel gives every deployment its own hostname
+        (`project-<hash>-team.vercel.app`), so pinning the exact URL works until
+        the next push and then breaks. Setting the production domain here lets
+        its previews through as well, matched on the project prefix rather than
+        `.vercel.app` at large - which would admit anybody's Vercel project.
+        """
+        pattern = self.console_allowed_origin_regex.strip()
+        return pattern or None
 
     @property
     def console_cross_origin(self) -> bool:
@@ -294,7 +326,7 @@ class Settings(BaseSettings):
         same-origin deployment is never loosened for a frontend that does not
         exist.
         """
-        return bool(self.console_origins)
+        return bool(self.console_origins or self.console_origin_regex)
 
     @property
     def console_ready(self) -> bool:

@@ -510,3 +510,65 @@ def test_the_cookie_relaxes_only_when_a_frontend_is_hosted_elsewhere(
     cross_cookie = cross.headers["set-cookie"].lower()
     assert "samesite=none" in cross_cookie
     assert "secure" in cross_cookie, "SameSite=None is ignored without Secure"
+
+
+def test_a_bare_host_is_upgraded_to_https(tmp_path: Path) -> None:
+    """Observed in production: CONSOLE_ALLOWED_ORIGINS set without a scheme.
+
+    Browsers always send the scheme in `Origin`, so a bare host matches nothing
+    and every request is blocked before it reaches the server - meaning the
+    logs show absolutely nothing to debug from.
+    """
+    settings = _settings(
+        tmp_path / "bare.db",
+        console_enabled=True,
+        console_username="iScale-user",
+        console_password_hash=hash_password(PASSWORD),
+        console_session_secret="s",
+        console_allowed_origins="console.vercel.app, https://other.example.com/",
+    )
+
+    assert settings.console_origins == [
+        "https://console.vercel.app",
+        "https://other.example.com",
+    ]
+
+
+def test_preview_deployments_can_be_matched_by_pattern(tmp_path: Path) -> None:
+    """Vercel renames every deployment, so an exact URL breaks on the next push."""
+    settings = _settings(
+        tmp_path / "regex.db",
+        console_enabled=True,
+        console_username="iScale-user",
+        console_password_hash=hash_password(PASSWORD),
+        console_session_secret="s",
+        console_allowed_origin_regex=r"^https://my-console-[a-z0-9-]+\.vercel\.app$",
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        allowed = client.options(
+            f"{BASE}/api/login",
+            headers={
+                "Origin": "https://my-console-abc123-team.vercel.app",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert (
+            allowed.headers.get("access-control-allow-origin")
+            == "https://my-console-abc123-team.vercel.app"
+        )
+
+        # Anchored to the project prefix: a bare `.*\.vercel\.app` would let any
+        # Vercel project in the world call this API with credentials.
+        stranger = client.options(
+            f"{BASE}/api/login",
+            headers={
+                "Origin": "https://someone-else.vercel.app",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert (
+            stranger.headers.get("access-control-allow-origin")
+            != "https://someone-else.vercel.app"
+        )

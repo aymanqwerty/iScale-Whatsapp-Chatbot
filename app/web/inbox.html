@@ -112,6 +112,8 @@
   .btn:hover:not(:disabled){filter:brightness(1.08);}
   .btn:active:not(:disabled){transform:translateY(1px);}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
+  /* Busy is not disabled: the action is under way, so it keeps its colour. */
+  .btn.busy{opacity:1;cursor:progress;filter:saturate(.85) brightness(.95);}
   .btn.take{background:linear-gradient(180deg,#f5bd47,#e0a11f);color:#3b2a00;}
   .btn.give{background:linear-gradient(180deg,#14c98d,#0d9c6d);color:#04231a;}
 
@@ -253,6 +255,12 @@ const $ = (id) => document.getElementById(id);
 
 let current = null, paused = false, canReply = false, convos = [], listLoaded = false;
 let fetching = false, socket = null, retry = 1000, tempSeq = -1;
+
+// Bumped on every handover. A poll already in flight when the button is pressed
+// carries the OLD bot_paused, and applying it flipped the button back a moment
+// after the click - then forward again on the next poll. Comparing this across
+// the await lets a stale response be recognised and discarded.
+let handoverSeq = 0, handoverBusy = false;
 
 // Per-conversation cache. Re-opening a thread then paints instantly from memory
 // while the delta fetch runs behind it, so the pane is never blank while the
@@ -485,6 +493,7 @@ async function refresh(full) {
   if (fetching && !full) return;
   fetching = true;
   const phone = current, st = state(phone);
+  const seq = handoverSeq;
   try {
     const r = await api(
       '/messages/' + encodeURIComponent(phone) + '?after_id=' + (full ? 0 : st.lastId)
@@ -494,7 +503,10 @@ async function refresh(full) {
     if (phone !== current) return;   // switched conversation mid-flight
     if (full) { st.msgs = []; st.seen = new Set(); st.lastId = 0; }
     const added = absorb(phone, d.messages);
-    paused = d.bot_paused;
+    // Only trust this response's handover value if nothing changed it while the
+    // request was in flight. Messages are always applied - they cannot be
+    // stale, only incomplete.
+    if (handoverSeq === seq) paused = d.bot_paused;
     canReply = d.can_reply;
     $('hWho').textContent = d.name || 'Unknown';
     $('hSub').textContent = prettyPhone(d.phone);
@@ -507,8 +519,11 @@ async function refresh(full) {
 
 function paintControls() {
   const t = $('toggle');
-  t.textContent = paused ? 'Hand back to bot' : 'Take over from bot';
-  t.className = 'btn ' + (paused ? 'give' : 'take');
+  t.textContent = handoverBusy
+    ? (paused ? 'Taking over…' : 'Handing back…')
+    : (paused ? 'Hand back to bot' : 'Take over from bot');
+  t.className = 'btn ' + (paused ? 'give' : 'take') + (handoverBusy ? ' busy' : '');
+  t.disabled = handoverBusy;
 
   const usable = paused && canReply;
   $('send').disabled = !usable;
@@ -541,10 +556,14 @@ function toast(msg) {
 // a POST plus two follow-up fetches before anything moved, which is what made it
 // feel slow. A failure rolls the state back and says so.
 $('toggle').addEventListener('click', async () => {
-  if (!current) return;
-  const phone = current, want = !paused;
+  // Locked while in flight: a second click queued a contrary request, and
+  // whichever finished last won - so the button could settle on the opposite
+  // of what was asked for.
+  if (!current || handoverBusy) return;
+  const phone = current, want = !paused, seq = ++handoverSeq;
   const row = convos.find((c) => c.phone === phone);
 
+  handoverBusy = true;
   paused = want; paintControls();
   if (row) { row.bot_paused = want; renderList(); }
 
@@ -555,11 +574,22 @@ $('toggle').addEventListener('click', async () => {
       body: JSON.stringify({ phone: phone, paused: want }),
     });
     if (!r.ok) throw new Error();
-    if (want && canReply) $('text').focus();
+    const saved = await r.json();
+    // The server's answer is the truth, but only while it is still the most
+    // recent intent - a slower earlier request must not undo a later click.
+    if (handoverSeq === seq) {
+      paused = saved.bot_paused; paintControls();
+      if (row) { row.bot_paused = saved.bot_paused; renderList(); }
+      if (paused && canReply) $('text').focus();
+    }
   } catch (err) {
-    paused = !want; paintControls();
-    if (row) { row.bot_paused = !want; renderList(); }
-    toast('Could not change the handover. Try again.');
+    if (handoverSeq === seq) {
+      paused = !want; paintControls();
+      if (row) { row.bot_paused = !want; renderList(); }
+      toast('Could not change the handover. Try again.');
+    }
+  } finally {
+    if (handoverSeq === seq) { handoverBusy = false; paintControls(); }
   }
 });
 
