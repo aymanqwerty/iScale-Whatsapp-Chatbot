@@ -172,9 +172,17 @@ class Settings(BaseSettings):
     #: finished (a booking completed, or they said goodbye), to a conversation a
     #: human has taken over, or twice to anyone.
     inactivity_enabled: bool = True
-    #: Silence before the follow-up. Below about ten minutes this interrupts
-    #: people who are simply reading or comparing courses in another tab.
-    inactivity_minutes: int = 15
+    #: Silence before the first nudge. An hour is long enough that the person is
+    #: genuinely away rather than reading, comparing courses in another tab, or
+    #: answering a call.
+    inactivity_minutes: int = 60
+    #: Gap between the first nudge and the second, measured from when the first
+    #: was sent. Two attempts total, then silence - a third would be pestering.
+    #:
+    #: 60 + 360 puts the last message seven hours after they went quiet, safely
+    #: inside WhatsApp's 24-hour window. Raising these much risks the second
+    #: nudge being refused by Meta rather than merely late.
+    inactivity_followup_minutes: int = 360
     #: How often the sweeper looks. A minute is far finer than the 15-minute
     #: threshold needs, and costs one indexed query.
     inactivity_sweep_seconds: int = 60

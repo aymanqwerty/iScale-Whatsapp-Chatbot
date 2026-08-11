@@ -1,10 +1,17 @@
-"""Follow up once when a conversation goes quiet, then close it.
+"""Nudge a conversation that has gone quiet. Twice at most, and never close it.
 
 Someone who stops replying mid-flow is usually distracted rather than
 uninterested, and a half-finished booking is the most recoverable lead there
-is. One check-in gets them back; a sequence of them is harassment.
+is. Two check-ins get them back; a third would be harassment.
 
-Everything here is about who NOT to message. The rules are deliberately
+NOTHING IS CLOSED. The conversation keeps its state, its course, its captured
+details and its history, so replying six hours later continues the same thread.
+Marking it inactive would create a fresh conversation on the next message - and
+because history is loaded per conversation, the model would then greet a
+half-known customer as a stranger. The point of these messages is to bring
+someone back, which is the opposite of discarding everything they told us.
+
+Everything else here is about who NOT to message. The rules are deliberately
 conservative, because the cost of a wrong follow-up (pestering a customer who
 already booked, or talking over a human agent) is far higher than the cost of
 missing one.
@@ -34,8 +41,20 @@ from app.services.whatsapp.base import MessagingClient
 
 logger = get_logger(__name__)
 
-#: Marks a conversation as already chased. One follow-up, ever.
+#: Nudges sent so far: absent/0, 1, or 2. Two is the end of it - the copy for
+#: the second says so, and a third would be pestering.
+CTX_INACTIVITY_STAGE = "inactivity_stage"
+
+#: When the last nudge went out, ISO-8601. The second is timed from this rather
+#: than from the customer's last message, so "six hours later" means six hours
+#: after we spoke - which is how it reads.
+CTX_INACTIVITY_AT = "inactivity_at"
+
+#: The previous single-nudge flag. Still read, so a conversation already chased
+#: before this change is not chased again the moment it deploys.
 CTX_INACTIVITY_SENT = "inactivity_sent"
+
+MAX_STAGE = 2
 
 #: States that mean the conversation reached its end. Someone whose call is
 #: booked does not need chasing - they need leaving alone.
@@ -45,7 +64,7 @@ _FINISHED: frozenset[ConversationState] = frozenset(
 
 
 class InactivitySweeper:
-    """Periodically checks for stalled conversations and follows up once."""
+    """Periodically checks for stalled conversations and nudges them."""
 
     def __init__(
         self,
@@ -68,7 +87,8 @@ class InactivitySweeper:
         logger.info(
             "Inactivity follow-up active",
             extra={
-                "after_minutes": self._settings.inactivity_minutes,
+                "first_after_minutes": self._settings.inactivity_minutes,
+                "second_after_minutes": self._settings.inactivity_followup_minutes,
                 "every_seconds": self._settings.inactivity_sweep_seconds,
             },
         )
@@ -99,10 +119,11 @@ class InactivitySweeper:
 
     # ------------------------------------------------------------------ #
     async def sweep(self) -> int:
-        """Follow up on every stalled conversation. Returns how many were sent."""
+        """Nudge every stalled conversation that is due. Returns how many."""
         now = datetime.now(UTC)
-        quiet_since = now - timedelta(minutes=self._settings.inactivity_minutes)
+        first_due = now - timedelta(minutes=self._settings.inactivity_minutes)
         too_old = now - timedelta(hours=self._settings.inactivity_max_age_hours)
+        gap = timedelta(minutes=self._settings.inactivity_followup_minutes)
 
         sent = 0
         async with self._database.session() as session:
@@ -112,7 +133,7 @@ class InactivitySweeper:
                     .join(User, User.id == Conversation.user_id)
                     .where(
                         Conversation.is_active.is_(True),
-                        Conversation.last_activity_at <= quiet_since,
+                        Conversation.last_activity_at <= first_due,
                         # Outside WhatsApp's window the send is rejected anyway.
                         Conversation.last_activity_at >= too_old,
                         Conversation.current_state.not_in(tuple(_FINISHED)),
@@ -124,21 +145,24 @@ class InactivitySweeper:
             ).all()
 
             for conversation, user in rows:
-                if conversation.get_ctx(CTX_INACTIVITY_SENT, False):
+                stage = _stage_of(conversation)
+                if stage >= MAX_STAGE:
+                    continue
+                if stage == 1 and not _due_for_second(conversation, now, gap):
                     continue
                 if not await self._is_waiting_on_them(session, conversation):
                     continue
 
-                text = _follow_up_text(conversation, user)
+                text = _follow_up_text(conversation, user, stage + 1)
                 try:
                     await self._messaging.send(user.phone, OutboundMessage(text=text))
                 except Exception:
-                    # Leave the flag unset so the next sweep retries. A failed
-                    # send is usually the 24-hour window closing, which the age
-                    # filter above will exclude shortly anyway.
+                    # Leave the stage unchanged so the next sweep retries. A
+                    # failed send is usually the 24-hour window closing, which
+                    # the age filter above excludes shortly anyway.
                     logger.warning(
                         "Inactivity follow-up could not be delivered",
-                        extra={"phone": _mask(user.phone)},
+                        extra={"phone": _mask(user.phone), "stage": stage + 1},
                     )
                     continue
 
@@ -151,12 +175,13 @@ class InactivitySweeper:
                         timestamp=datetime.now(UTC),
                     )
                 )
-                conversation.set_ctx(CTX_INACTIVITY_SENT, True)
-                # Closed straight away: the message says so, and the next thing
-                # they send should start cleanly rather than resuming a form
-                # they abandoned twenty minutes ago.
-                conversation.is_active = False
-                conversation.current_state = ConversationState.END
+                conversation.set_ctx(CTX_INACTIVITY_STAGE, stage + 1)
+                conversation.set_ctx(CTX_INACTIVITY_AT, datetime.now(UTC).isoformat())
+                # Deliberately NOT touching is_active, current_state or
+                # last_activity_at. The conversation must stay exactly where it
+                # was so the customer can carry on, and last_activity_at must
+                # keep meaning "when the CUSTOMER was last active" - moving it
+                # would push the 24-hour window out and reset the schedule.
                 sent += 1
 
             if sent:
@@ -206,17 +231,56 @@ class InactivitySweeper:
         return True
 
 
-def _follow_up_text(conversation: Conversation, user: User) -> str:
-    """Tailored to where they stopped.
+def _follow_up_text(conversation: Conversation, user: User, stage: int) -> str:
+    """Tailored to where they stopped, and to which nudge this is.
 
-    A half-captured booking is the most recoverable thing in the funnel, and a
-    generic "are you still there?" wastes it - so that case names what was left
-    unfinished instead.
+    A half-captured booking is the most recoverable thing in the funnel, so that
+    case names what was left unfinished rather than asking a generic "are you
+    still there?". The second nudge also says it is the last - someone who has
+    ignored two messages deserves to know a third is not coming.
     """
     name = (user.name or "").split()[0] if user.name else ""
-    if conversation.current_state in CALLBACK_CAPTURE_STATES:
-        return copy.INACTIVITY_BOOKING.format(greeting=_greeting(name))
-    return copy.INACTIVITY_GENERAL.format(greeting=_greeting(name))
+    greeting = _greeting(name)
+    mid_booking = conversation.current_state in CALLBACK_CAPTURE_STATES
+
+    if stage >= MAX_STAGE:
+        template = (
+            copy.INACTIVITY_BOOKING_LAST
+            if mid_booking
+            else copy.INACTIVITY_GENERAL_LAST
+        )
+    else:
+        template = copy.INACTIVITY_BOOKING if mid_booking else copy.INACTIVITY_GENERAL
+    return template.format(greeting=greeting)
+
+
+def _stage_of(conversation: Conversation) -> int:
+    """How many nudges this conversation has had, tolerating the older flag."""
+    try:
+        stage = int(conversation.get_ctx(CTX_INACTIVITY_STAGE, 0) or 0)
+    except (TypeError, ValueError):  # pragma: no cover - we write this ourselves
+        stage = 0
+    if stage == 0 and conversation.get_ctx(CTX_INACTIVITY_SENT, False):
+        # Chased once by the previous single-nudge version.
+        return 1
+    return stage
+
+
+def _due_for_second(conversation: Conversation, now: datetime, gap: timedelta) -> bool:
+    """Whether enough time has passed since the first nudge."""
+    raw = conversation.get_ctx(CTX_INACTIVITY_AT)
+    if not raw:
+        # No timestamp - a row written by the previous version. Treating it as
+        # not yet due is the safe direction: the second nudge never fires,
+        # rather than firing the instant this deploys.
+        return False
+    try:
+        sent_at = datetime.fromisoformat(str(raw))
+    except ValueError:  # pragma: no cover - we write this ourselves
+        return False
+    if sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=UTC)
+    return now - sent_at >= gap
 
 
 def _greeting(name: str) -> str:
