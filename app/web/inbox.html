@@ -260,7 +260,7 @@ let fetching = false, socket = null, retry = 1000, tempSeq = -1;
 // carries the OLD bot_paused, and applying it flipped the button back a moment
 // after the click - then forward again on the next poll. Comparing this across
 // the await lets a stale response be recognised and discarded.
-let handoverSeq = 0, handoverBusy = false;
+let handoverSeq = 0, handoverBusy = false, handoverPending = false;
 
 // Per-conversation cache. Re-opening a thread then paints instantly from memory
 // while the delta fetch runs behind it, so the pane is never blank while the
@@ -506,7 +506,7 @@ async function refresh(full) {
     // Only trust this response's handover value if nothing changed it while the
     // request was in flight. Messages are always applied - they cannot be
     // stale, only incomplete.
-    if (handoverSeq === seq) paused = d.bot_paused;
+    if (!handoverPending && handoverSeq === seq) paused = d.bot_paused;
     canReply = d.can_reply;
     $('hWho').textContent = d.name || 'Unknown';
     $('hSub').textContent = prettyPhone(d.phone);
@@ -559,10 +559,12 @@ $('toggle').addEventListener('click', async () => {
   // Locked while in flight: a second click queued a contrary request, and
   // whichever finished last won - so the button could settle on the opposite
   // of what was asked for.
-  if (!current || handoverBusy) return;
-  const phone = current, want = !paused, seq = ++handoverSeq;
+  if (!current || handoverPending) return;
+  const phone = current, want = !paused;
   const row = convos.find((c) => c.phone === phone);
 
+  handoverPending = true;
+  handoverSeq += 1;          // discard anything already in flight
   handoverBusy = true;
   paused = want; paintControls();
   if (row) { row.bot_paused = want; renderList(); }
@@ -575,21 +577,22 @@ $('toggle').addEventListener('click', async () => {
     });
     if (!r.ok) throw new Error();
     const saved = await r.json();
-    // The server's answer is the truth, but only while it is still the most
-    // recent intent - a slower earlier request must not undo a later click.
-    if (handoverSeq === seq) {
-      paused = saved.bot_paused; paintControls();
-      if (row) { row.bot_paused = saved.bot_paused; renderList(); }
-      if (paused && canReply) $('text').focus();
-    }
+    // Bumped again before applying: a poll issued while the POST was in flight
+    // is now stale, and this is the bump that stops it landing a moment later
+    // and reverting the button.
+    handoverSeq += 1;
+    paused = saved.bot_paused; paintControls();
+    if (row) { row.bot_paused = saved.bot_paused; renderList(); }
+    if (paused && canReply) $('text').focus();
   } catch (err) {
-    if (handoverSeq === seq) {
-      paused = !want; paintControls();
-      if (row) { row.bot_paused = !want; renderList(); }
-      toast('Could not change the handover. Try again.');
-    }
+    handoverSeq += 1;
+    paused = !want; paintControls();
+    if (row) { row.bot_paused = !want; renderList(); }
+    toast('Could not change the handover. Try again.');
   } finally {
-    if (handoverSeq === seq) { handoverBusy = false; paintControls(); }
+    handoverPending = false;
+    handoverBusy = false;
+    paintControls();
   }
 });
 
