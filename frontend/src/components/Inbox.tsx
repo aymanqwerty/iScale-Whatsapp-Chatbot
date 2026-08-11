@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   api,
   SessionExpired,
@@ -7,6 +7,12 @@ import {
   type Thread as ThreadData,
 } from "../lib/api";
 import { avatarStyle, initials, prettyPhone } from "../lib/format";
+import {
+  handoverReducer,
+  initialHandover,
+  isBusy,
+  isPaused,
+} from "../lib/handover";
 import { useInterval, useLiveUpdates } from "../lib/useLiveUpdates";
 import { ConversationList } from "./ConversationList";
 import { Composer } from "./Composer";
@@ -29,7 +35,6 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [header, setHeader] = useState({ name: "", phone: "" });
-  const [paused, setPaused] = useState(false);
   const [canReply, setCanReply] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -40,26 +45,16 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
   const currentRef = useRef<string | null>(null);
   currentRef.current = current;
 
-  // Bumped every time the handover is changed. A poll that was already in
-  // flight when the button was pressed carries the OLD `bot_paused`, and
-  // applying it flipped the button back a moment after the user clicked - then
-  // forward again on the next poll. Comparing this counter across the await
-  // lets a stale response be recognised and its handover value discarded.
-  // Two guards, because they cover different windows and neither is enough on
-  // its own:
-  //
-  //   `handoverPending` - true from the click until the POST settles. While it
-  //   is set, NO poll may write the handover state, because the server has not
-  //   been told yet and will confidently return the old value.
-  //
-  //   `handoverSeq` - bumped when the click starts AND again when it settles.
-  //   A poll captures it before awaiting; if it moved, that response predates
-  //   the current truth and its handover value is discarded. The second bump is
-  //   the one that matters: without it a poll issued mid-POST lands after
-  //   `pending` clears and quietly reverts the button.
-  const handoverSeq = useRef(0);
-  const handoverPending = useRef(false);
-  const [handoverBusy, setHandoverBusy] = useState(false);
+  // One owner for the handover state. While the user has an unconfirmed
+  // intent, the server cannot write it - which makes the flip-back impossible
+  // by construction rather than unlikely by timing. See lib/handover.ts.
+  const [handover, dispatch] = useReducer(handoverReducer, initialHandover);
+  const paused = isPaused(handover);
+  const handoverBusy = isBusy(handover);
+  // Read inside async callbacks, where `handover` itself would be captured
+  // stale by the closure.
+  const handoverRef = useRef(handover);
+  handoverRef.current = handover;
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -99,7 +94,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
     async (phone: string, full: boolean) => {
       if (fetching.current && !full) return;
       fetching.current = true;
-      const seq = handoverSeq.current;
+      const epoch = handoverRef.current.epoch;
       try {
         const entry = slot(phone);
         const data: ThreadData = await api.messages(
@@ -123,12 +118,9 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
           added++;
         }
 
-        // Only trust this response's handover value if no change was in flight
-        // and none completed while this request was travelling. Messages are
+        // The reducer decides whether this is still current. Messages are
         // always applied - they cannot be stale, only incomplete.
-        if (!handoverPending.current && handoverSeq.current === seq) {
-          setPaused(data.bot_paused);
-        }
+        dispatch({ type: "observed", paused: data.bot_paused, epoch });
         setCanReply(data.can_reply);
         setHeader({ name: data.name, phone: data.phone });
         if (full || added) setMessages([...entry.messages]);
@@ -149,7 +141,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
       const entry = slot(phone);
       const row = conversations.find((c) => c.phone === phone);
       setHeader({ name: row?.name ?? "", phone });
-      if (row) setPaused(row.bot_paused);
+      dispatch({ type: "reset", paused: row?.bot_paused ?? false });
 
       if (entry.messages.length) {
         setMessages([...entry.messages]); // instant, from cache
@@ -165,49 +157,34 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
 
   /* ---------------- handover, applied optimistically ---------------- */
   async function toggleHandover() {
-    // Locked while in flight. Without this, a second click queued a contrary
-    // request and whichever finished last won - so the button could settle on
-    // the opposite of what was asked for.
-    // A ref, not the state flag: two clicks in the same tick would both see the
-    // old `handoverBusy` and both fire.
-    if (!current || handoverPending.current) return;
+    if (!current || isBusy(handoverRef.current)) return;
     const phone = current;
-    const want = !paused;
+    const want = !isPaused(handoverRef.current);
 
-    handoverPending.current = true;
-    handoverSeq.current += 1; // discard anything already in flight
-    setHandoverBusy(true);
-
-    // Flip first, confirm after. Waiting on a POST plus two follow-up fetches
-    // before anything moved is what made this button feel broken.
-    setPaused(want);
+    // Displayed immediately; the reducer refuses every server update until this
+    // settles, so nothing can revert it in between.
+    dispatch({ type: "click" });
     setConversations((rows) =>
       rows.map((c) => (c.phone === phone ? { ...c, bot_paused: want } : c)),
     );
 
     try {
       const result = await api.handover(phone, want);
-      // Bumped again before applying: any poll issued while the POST was in
-      // flight is now stale, and this is the bump that stops it landing a
-      // moment later and reverting the button.
-      handoverSeq.current += 1;
-      setPaused(result.bot_paused);
+      // The server's value, not the guess - if another tab already handed this
+      // conversation back, the server is right and the button follows it.
+      dispatch({ type: "confirmed", paused: result.bot_paused });
       setConversations((rows) =>
         rows.map((c) =>
           c.phone === phone ? { ...c, bot_paused: result.bot_paused } : c,
         ),
       );
     } catch (err) {
-      handoverSeq.current += 1;
-      setPaused(!want);
+      dispatch({ type: "failed" });
       setConversations((rows) =>
         rows.map((c) => (c.phone === phone ? { ...c, bot_paused: !want } : c)),
       );
       notify("Could not change the handover. Try again.");
       guard(err);
-    } finally {
-      handoverPending.current = false;
-      setHandoverBusy(false);
     }
   }
 
