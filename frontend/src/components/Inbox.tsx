@@ -247,6 +247,26 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
   // Keeps the relative timestamps in the list honest.
   useInterval(() => setConversations((rows) => [...rows]), 60000);
 
+  const closeThread = useCallback(() => {
+    setCurrent(null);
+    currentRef.current = null;
+    setMessages([]);
+  }, []);
+
+  // Escape closes the pane, but not while someone is mid-sentence in the
+  // composer or the search box - there it should mean "clear this field",
+  // which is what the browser already does.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      if (tag === "textarea" || tag === "input") return;
+      closeThread();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeThread]);
+
   async function signOut() {
     await api.logout();
     onSignedOut();
@@ -262,9 +282,14 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
     <div className={`shell${current ? " viewing" : ""}`}>
       <aside>
         <div className="brand">
-          <div className="mark">iS</div>
           <div className="t">
-            <b>Console</b>
+            <img
+              className="wordmark"
+              src="/title.png"
+              alt="The iScale"
+              width={152}
+              height={31}
+            />
             <span>
               <i className={`dot${connected ? "" : " off"}`} />
               {connected ? "Live" : "Reconnecting…"}
@@ -310,7 +335,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
               <button
                 className="icon backbtn"
                 type="button"
-                onClick={() => setCurrent(null)}
+                onClick={closeThread}
                 aria-label="Back to list"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -353,6 +378,21 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
                   : paused
                     ? "Hand back to bot"
                     : "Take over from bot"}
+              </button>
+              {/* Closes the VIEW, not the conversation. Nothing is ended, no
+                  handover is undone and the customer sees nothing - it just
+                  clears the pane, which desktop otherwise had no way to do. */}
+              <button
+                className="icon close"
+                type="button"
+                onClick={closeThread}
+                title="Close this conversation (Esc)"
+                aria-label="Close this conversation"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
               </button>
             </header>
 

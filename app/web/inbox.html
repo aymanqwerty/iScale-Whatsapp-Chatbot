@@ -42,14 +42,14 @@
   }
   .brand{display:flex;align-items:center;gap:11px;padding:15px 16px 14px;
          border-bottom:1px solid var(--line);}
-  .mark{
-    width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;
-    background:linear-gradient(145deg,#16d69a,#0b7f5f);color:#04231a;
-    font-weight:800;font-size:13px;letter-spacing:-.02em;
-    box-shadow:0 6px 16px -8px rgba(16,185,129,.8);
-  }
   .brand .t{flex:1;min-width:0;}
-  .brand .t b{display:block;font-size:14px;font-weight:650;letter-spacing:-.01em;}
+  /* The wordmark carries the shield, the name and the brand colour, so it
+     stands alone - no badge beside it and no "Console" heading. Sized by width
+     with height:auto so its 4.95:1 ratio can never be squashed. */
+  .wordmark{
+    display:block;width:152px;height:auto;margin:0 0 5px;
+    filter:drop-shadow(0 4px 12px rgba(197,15,20,.28));
+  }
   .brand .t span{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);}
   .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
        box-shadow:0 0 0 3px rgba(16,185,129,.16);transition:background .2s,box-shadow .2s;}
@@ -60,6 +60,13 @@
     transition:background .15s,color .15s,border-color .15s;
   }
   .icon:hover{background:var(--raised);color:var(--text);border-color:rgba(255,255,255,.13);}
+  .icon:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent);}
+  /* Beside the handover button, so it matches its height rather than the 32px
+     sidebar icons. Red only on hover: closing the pane is harmless, and a
+     permanently red control reads as destructive. */
+  .icon.close{width:38px;height:38px;border-radius:10px;}
+  .icon.close:hover{background:rgba(248,113,113,.12);color:var(--err);
+                    border-color:rgba(248,113,113,.35);}
 
   .searchwrap{padding:12px 12px 10px;position:relative;}
   .searchwrap svg{position:absolute;left:24px;top:50%;transform:translateY(-50%);
@@ -187,9 +194,8 @@
 
 <aside>
   <div class="brand">
-    <div class="mark">iS</div>
     <div class="t">
-      <b>Console</b>
+      <img class="wordmark" src="/title.png" alt="The iScale" width="152" height="31">
       <span><i class="dot" id="dot"></i><span id="conn">Live</span></span>
     </div>
     <button class="icon" id="signout" type="button" title="Sign out" aria-label="Sign out">
@@ -227,6 +233,13 @@
     </div>
     <div class="spacer"></div>
     <button class="btn take" id="toggle" type="button"></button>
+    <!-- Closes the VIEW, not the conversation. Nothing is ended, no handover
+         is undone and the customer sees nothing. -->
+    <button class="icon close" id="close" type="button"
+            title="Close this conversation (Esc)" aria-label="Close this conversation">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
   </header>
 
   <div id="thread">
@@ -255,6 +268,9 @@
 
 <script>
 const API = '/api/v1/console/api';
+// Captured before the first render so closing can restore the original
+// placeholder rather than rebuilding it in JavaScript.
+const EMPTY = document.querySelector('#thread .empty').cloneNode(true);
 const $ = (id) => document.getElementById(id);
 
 let current = null, paused = false, canReply = false, convos = [], listLoaded = false;
@@ -650,7 +666,26 @@ $('text').addEventListener('input', function () {
   this.style.height = Math.min(this.scrollHeight, 132) + 'px';
 });
 $('search').addEventListener('input', renderList);
-$('back').addEventListener('click', () => document.body.classList.remove('viewing'));
+function closeThread() {
+  current = null;
+  document.body.classList.remove('viewing');
+  $('head').hidden = true;
+  $('foot').hidden = true;
+  $('thread').replaceChildren(EMPTY.cloneNode(true));
+  renderList();
+}
+
+$('back').addEventListener('click', closeThread);
+$('close').addEventListener('click', closeThread);
+
+// Escape closes the pane, but not while someone is mid-sentence in the composer
+// or the search box - there it should mean "clear this field".
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+  if (tag === 'textarea' || tag === 'input') return;
+  if (current) closeThread();
+});
 $('signout').addEventListener('click', async () => {
   try { await api('/logout', { method: 'POST' }); } catch (err) { /* leaving anyway */ }
   location.href = '/api/v1/console';

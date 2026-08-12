@@ -39,13 +39,14 @@
     border:1px solid var(--line); border-radius:20px; padding:38px 34px 30px;
     box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 24px 70px -20px rgba(0,0,0,.85);
   }
-  .mark{
-    width:46px;height:46px;border-radius:13px;display:grid;place-items:center;
-    background:linear-gradient(145deg,#16d69a,#0b7f5f);
-    color:#04231a;font-weight:800;font-size:19px;letter-spacing:-.02em;
-    box-shadow:0 8px 22px -8px rgba(16,185,129,.75);
+  /* The wordmark carries the shield, the name and the brand colour, so it
+     stands alone - no tile behind it and no "Console" heading beside it.
+     Sized by width with height:auto so its 4.95:1 ratio survives any font
+     scaling the browser applies. */
+  .wordmark{
+    display:block;width:216px;height:auto;margin:2px 0 22px;
+    filter:drop-shadow(0 6px 18px rgba(197,15,20,.30));
   }
-  h1{margin:20px 0 5px;font-size:21px;font-weight:650;letter-spacing:-.02em;}
   .sub{margin:0 0 26px;color:var(--muted);font-size:13.5px;}
 
   label{display:block;font-size:11.5px;font-weight:600;color:var(--faint);
@@ -89,8 +90,7 @@
 </head>
 <body>
 <main class="card">
-  <div class="mark">iS</div>
-  <h1>Console</h1>
+  <img class="wordmark" src="/title.png" alt="The iScale" width="216" height="44">
   <p class="sub">Sign in to view and take over conversations.</p>
 
   <form id="f" novalidate>
