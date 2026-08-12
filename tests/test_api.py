@@ -474,3 +474,44 @@ def test_a_message_without_a_timestamp_is_still_answered(
 
     assert body["stale"] == 0
     assert body["messages"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Branding
+# --------------------------------------------------------------------------- #
+def test_the_favicon_is_served(client: TestClient) -> None:
+    """Browsers fetch /favicon.ico whether or not a page links to it."""
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/x-icon"
+    assert len(response.content) > 0
+
+
+def test_every_linked_icon_exists(client: TestClient) -> None:
+    """A missing size is a broken tab icon on exactly one class of device."""
+    for name in (
+        "favicon-16.png",
+        "favicon-32.png",
+        "favicon-192.png",
+        "apple-touch-icon.png",
+    ):
+        response = client.get(f"/{name}")
+        assert response.status_code == 200, name
+        assert response.headers["content-type"] == "image/png", name
+
+
+def test_the_icon_route_serves_nothing_else(client: TestClient) -> None:
+    """It sits at the root, so it must not become a way to read `app/web`.
+
+    That directory also holds the console's HTML, which is gated behind a
+    session check the icon route knows nothing about.
+    """
+    for path in ("/login.html", "/inbox.html", "/nonsense", "/etc/passwd"):
+        assert client.get(path).status_code == 404, path
+
+
+def test_the_icon_route_does_not_shadow_real_endpoints(client: TestClient) -> None:
+    """A catch-all at the root is easy to get wrong."""
+    assert client.get("/").status_code == 200
+    assert client.get("/api/v1/health").status_code == 200

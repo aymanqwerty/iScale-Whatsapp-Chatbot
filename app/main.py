@@ -7,10 +7,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import __version__
 from app.api.v1 import api_router
@@ -79,6 +81,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(api_router, prefix=settings.api_prefix)
 
+    _register_icons(app)
+
     # HEAD as well as GET: uptime monitors default to HEAD, and a 405 there
     # reads as an outage.
     @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
@@ -90,6 +94,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }
 
     return app
+
+
+#: Icon files served from `app/web`, with the content type each must carry.
+#: An explicit map rather than a static mount: that directory also holds the
+#: console's HTML, and mounting it would serve those pages outside the auth
+#: checks that currently gate them.
+_ICON_FILES: dict[str, str] = {
+    "favicon.ico": "image/x-icon",
+    "favicon-16.png": "image/png",
+    "favicon-32.png": "image/png",
+    "favicon-192.png": "image/png",
+    "apple-touch-icon.png": "image/png",
+}
+
+
+def _register_icons(app: FastAPI) -> None:
+    """Serve the iScale favicon at the paths browsers actually request.
+
+    `/favicon.ico` is fetched automatically whether or not a page links to it,
+    so it lives at the root rather than under the console prefix.
+    """
+    web_dir = Path(__file__).resolve().parent / "web"
+
+    @app.get("/{filename}", include_in_schema=False)
+    async def icon(filename: str) -> Response:
+        media_type = _ICON_FILES.get(filename)
+        if media_type is None:
+            raise HTTPException(status_code=404)
+        path = web_dir / filename
+        if not path.is_file():  # pragma: no cover - packaging error
+            raise HTTPException(status_code=404)
+        return FileResponse(
+            path,
+            media_type=media_type,
+            # Long-lived: the logo changes about never, and a favicon refetched
+            # on every page load is pure noise in the access log.
+            headers={"Cache-Control": "public, max-age=604800"},
+        )
 
 
 def _register_cors(app: FastAPI, settings: Settings) -> None:
