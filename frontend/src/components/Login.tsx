@@ -26,12 +26,13 @@ export function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div className="login">
       <main className="card">
         <img
-          className="wordmark"
-          src="/title.png"
+          className="brandmark"
+          src="/logo.png"
           alt="The iScale"
-          width={216}
-          height={44}
+          width={52}
+          height={52}
         />
+        <h1>The iScale</h1>
         <p className="sub">Sign in to view and take over conversations.</p>
 
         <form onSubmit={submit} noValidate>

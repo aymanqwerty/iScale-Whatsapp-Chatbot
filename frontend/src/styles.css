@@ -35,14 +35,14 @@ button{font:inherit;}
   border:1px solid var(--line);border-radius:20px;padding:38px 34px 30px;
   box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 24px 70px -20px rgba(0,0,0,.85);
 }
-/* The wordmark carries the shield, the name and the brand colour, so it stands
-   alone - no tile behind it and no "Console" heading beside it. Sized by width
-   with height:auto so the 4.95:1 ratio can never be squashed. */
-.wordmark{
-  display:block;width:216px;height:auto;
-  margin:2px 0 22px;
-  filter:drop-shadow(0 6px 18px rgba(197,15,20,.30));
+/* The logo is a red badge on transparency, so it needs no tile behind it -
+   a coloured container would fight the brand rather than frame it. The glow
+   is tinted to the logo's own red so it reads as lit, not pasted on. */
+.brandmark{
+  width:52px;height:52px;display:block;
+  filter:drop-shadow(0 8px 20px rgba(197,15,20,.45));
 }
+.card h1{margin:20px 0 5px;font-size:21px;font-weight:650;letter-spacing:-.02em;}
 .card .sub{margin:0 0 26px;color:var(--muted);font-size:13.5px;}
 label{display:block;font-size:11.5px;font-weight:600;color:var(--faint);
   letter-spacing:.07em;text-transform:uppercase;margin:0 0 7px;}
@@ -84,9 +84,12 @@ aside{
 .brand{display:flex;align-items:center;gap:11px;padding:15px 16px 14px;
   border-bottom:1px solid var(--line);}
 
+.mark{
+  width:34px;height:34px;display:block;flex-shrink:0;
+  filter:drop-shadow(0 5px 14px rgba(197,15,20,.42));
+}
 .brand .t{flex:1;min-width:0;}
-.brand .t .wordmark{width:152px;margin:0 0 5px;
-  filter:drop-shadow(0 4px 12px rgba(197,15,20,.28));}
+.brand .t b{display:block;font-size:14px;font-weight:650;letter-spacing:-.01em;}
 .brand .t span{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
   box-shadow:0 0 0 3px rgba(16,185,129,.16);transition:background .2s,box-shadow .2s;}

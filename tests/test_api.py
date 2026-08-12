@@ -495,9 +495,9 @@ def test_every_linked_icon_exists(client: TestClient) -> None:
         "favicon-32.png",
         "favicon-192.png",
         "apple-touch-icon.png",
-        # The wordmark heading both pages - a 404 here leaves a broken-image
-        # icon where the company name should be.
-        "title.png",
+        # The brand mark beside "The iScale" in both headers - a 404 here leaves
+        # a broken-image icon in the corner of every page.
+        "logo.png",
     ):
         response = client.get(f"/{name}")
         assert response.status_code == 200, name
