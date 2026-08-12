@@ -42,14 +42,12 @@
   }
   .brand{display:flex;align-items:center;gap:11px;padding:15px 16px 14px;
          border-bottom:1px solid var(--line);}
-  .brand .t{flex:1;min-width:0;}
-  /* The wordmark carries the shield, the name and the brand colour, so it
-     stands alone - no badge beside it and no "Console" heading. Sized by width
-     with height:auto so its 4.95:1 ratio can never be squashed. */
-  .wordmark{
-    display:block;width:152px;height:auto;margin:0 0 5px;
-    filter:drop-shadow(0 4px 12px rgba(197,15,20,.28));
+  .mark{
+    width:34px;height:34px;display:block;flex-shrink:0;
+    filter:drop-shadow(0 5px 14px rgba(197,15,20,.42));
   }
+  .brand .t{flex:1;min-width:0;}
+  .brand .t b{display:block;font-size:14px;font-weight:650;letter-spacing:-.01em;}
   .brand .t span{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);}
   .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
        box-shadow:0 0 0 3px rgba(16,185,129,.16);transition:background .2s,box-shadow .2s;}
@@ -194,8 +192,9 @@
 
 <aside>
   <div class="brand">
+    <img class="mark" src="/logo.png" alt="" width="34" height="34">
     <div class="t">
-      <img class="wordmark" src="/title.png" alt="The iScale" width="152" height="31">
+      <b>The iScale</b>
       <span><i class="dot" id="dot"></i><span id="conn">Live</span></span>
     </div>
     <button class="icon" id="signout" type="button" title="Sign out" aria-label="Sign out">

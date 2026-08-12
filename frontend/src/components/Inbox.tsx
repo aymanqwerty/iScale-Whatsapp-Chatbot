@@ -282,14 +282,9 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
     <div className={`shell${current ? " viewing" : ""}`}>
       <aside>
         <div className="brand">
+          <img className="mark" src="/logo.png" alt="" width={34} height={34} />
           <div className="t">
-            <img
-              className="wordmark"
-              src="/title.png"
-              alt="The iScale"
-              width={152}
-              height={31}
-            />
+            <b>The iScale</b>
             <span>
               <i className={`dot${connected ? "" : " off"}`} />
               {connected ? "Live" : "Reconnecting…"}
