@@ -106,6 +106,8 @@ _ICON_FILES: dict[str, str] = {
     "favicon-32.png": "image/png",
     "favicon-192.png": "image/png",
     "apple-touch-icon.png": "image/png",
+    # The wordmark that heads the login card and the console sidebar.
+    "title.png": "image/png",
 }
 
 
