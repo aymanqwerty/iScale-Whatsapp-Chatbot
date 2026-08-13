@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   handoverReducer,
   initialHandover,
+  initialToggle,
   isBusy,
   isPaused,
+  toggleBusy,
+  toggleReducer,
+  toggleValue,
   type Handover,
   type HandoverEvent,
 } from "./handover";
@@ -161,5 +165,35 @@ describe("the invariant", () => {
       ).toBe(true);
       expect(isBusy(state)).toBe(true);
     }
+  });
+});
+
+describe("the block toggle", () => {
+  it("is the same machine, not a copy of it", () => {
+    // The handover bug took three attempts to kill. A second, forked
+    // implementation of the same optimistic toggle is precisely how it would
+    // come back, so blocking is aliased to this reducer and this test fails
+    // the moment someone quietly gives it its own.
+    expect(toggleReducer).toBe(handoverReducer);
+    expect(toggleValue).toBe(isPaused);
+    expect(toggleBusy).toBe(isBusy);
+    expect(initialToggle).toBe(initialHandover);
+  });
+
+  it("keeps showing Blocked while a poll insists otherwise", () => {
+    // The exact sequence that broke the handover button: click, then a poll
+    // that left before it and still carries the old value.
+    const { frames, paused } = play([
+      { type: "click" },
+      { type: "observed", paused: false, epoch: 0 },
+      { type: "observed", paused: false, epoch: 0 },
+    ]);
+    expect(frames).toEqual([true, true, true]);
+    expect(paused).toBe(true);
+  });
+
+  it("rolls back to unblocked when the server refuses", () => {
+    const { paused } = play([{ type: "click" }, { type: "failed" }]);
+    expect(paused).toBe(false);
   });
 });

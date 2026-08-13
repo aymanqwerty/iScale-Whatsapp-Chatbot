@@ -67,7 +67,7 @@ export function ConversationList({
         <button
           key={c.phone}
           type="button"
-          className={`row${c.phone === current ? " active" : ""}`}
+          className={`row${c.phone === current ? " active" : ""}${c.blocked ? " blocked" : ""}`}
           onClick={() => onSelect(c.phone)}
         >
           <div className="av" style={avatarStyle(c.phone)}>
@@ -78,8 +78,14 @@ export function ConversationList({
               <span className="rname">
                 {c.name || "Unknown"}
                 {/* Marks a conversation a human has taken over, so nobody
-                    wonders why the bot has gone quiet on it. */}
-                {c.bot_paused && <span className="badge">YOU</span>}
+                    wonders why the bot has gone quiet on it. A blocked contact
+                    is quiet for a different reason, and says so instead - the
+                    two must never be mistaken for each other. */}
+                {c.blocked ? (
+                  <span className="badge stop">BLOCKED</span>
+                ) : (
+                  c.bot_paused && <span className="badge">YOU</span>
+                )}
               </span>
               <span className="rtime">{timeAgo(c.last_activity)}</span>
             </div>

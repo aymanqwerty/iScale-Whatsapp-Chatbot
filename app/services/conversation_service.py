@@ -94,6 +94,24 @@ class ConversationService:
             user = await users.get_or_create(
                 inbound.from_phone, profile_name=inbound.profile_name
             )
+
+            # Block gate. FIRST, and ahead of even storing the message, which is
+            # the difference between a block and a handover: a paused
+            # conversation is still recorded because a human is about to answer
+            # it, whereas a blocked one is meant to stop existing for us. So
+            # nothing is written, nothing is answered, and the console is not
+            # woken - a blocked spammer cannot push a real customer down the
+            # inbox or grow the transcript table unboundedly.
+            #
+            # The history from before the block is untouched, so an agent can
+            # still read why they blocked the number and undo it.
+            if user.blocked:
+                logger.info(
+                    "Message from a blocked contact ignored",
+                    extra={"wa_message_id": inbound.wa_message_id},
+                )
+                return TurnResult(), user.phone
+
             conversation = await conversations.get_or_create_active(
                 user.id, for_update=True
             )

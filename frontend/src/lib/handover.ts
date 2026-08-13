@@ -107,3 +107,17 @@ export function handoverReducer(
     }
   }
 }
+
+/*
+ * The block toggle has exactly the same shape and exactly the same race - an
+ * optimistic click competing with a background poll over one boolean - so it
+ * runs on this machine rather than a second copy of it. Aliased instead of
+ * duplicated: a divergent copy is how the original bug would come back, and
+ * every test in handover.test.ts covers both callers as a result.
+ *
+ * Read `paused` as "the value the user owns while their click is in flight".
+ */
+export const toggleReducer = handoverReducer;
+export const initialToggle = initialHandover;
+export const toggleValue = isPaused;
+export const toggleBusy = isBusy;

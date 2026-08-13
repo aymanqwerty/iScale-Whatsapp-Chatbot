@@ -25,6 +25,7 @@ export interface Conversation {
   last_message: string;
   last_sender: Sender | "";
   bot_paused: boolean;
+  blocked: boolean;
 }
 
 export interface Message {
@@ -41,6 +42,8 @@ export interface Thread {
   phone: string;
   name: string;
   bot_paused: boolean;
+  blocked: boolean;
+  blocked_at: string;
   can_reply: boolean;
   window_expires: string;
   messages: Message[];
@@ -119,6 +122,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ phone, paused }),
     }),
+
+  block: (phone: string, blocked: boolean) =>
+    request<{ phone: string; blocked: boolean; bot_paused: boolean }>(
+      "/api/block",
+      { method: "POST", body: JSON.stringify({ phone, blocked }) },
+    ),
 
   send: (phone: string, text: string) =>
     request<{ id: number; sender: Sender; text: string }>("/api/send", {

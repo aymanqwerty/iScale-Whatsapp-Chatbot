@@ -139,6 +139,9 @@ class InactivitySweeper:
                         Conversation.current_state.not_in(tuple(_FINISHED)),
                         # A human is handling this one; the bot must stay quiet.
                         User.bot_paused.is_(False),
+                        # Blocked outright. Chasing someone an agent blocked is
+                        # the single worst message this sweeper could send.
+                        User.blocked.is_(False),
                     )
                     .limit(200)
                 )
