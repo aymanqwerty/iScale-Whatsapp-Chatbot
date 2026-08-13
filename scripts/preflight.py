@@ -94,8 +94,74 @@ def check_llm() -> None:
     s = get_settings()
     if s.llm_provider == "groq":
         _check_groq(s)
-    else:
+    elif s.llm_provider == "gemini":
         _check_gemini(s)
+    else:
+        _check_openai(s)
+
+
+def _check_openai(s: Any) -> None:
+    section("OpenAI")
+    key = s.openai_api_key.get_secret_value()
+    if not key:
+        fail("OPENAI_API_KEY is empty", "the bot cannot answer questions")
+        return
+
+    payload: dict[str, Any] = {
+        "model": s.openai_model,
+        "max_completion_tokens": 1,
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    if s.openai_temperature is not None:
+        payload["temperature"] = s.openai_temperature
+
+    try:
+        r = httpx.post(
+            f"{s.openai_base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=20,
+        )
+    except Exception as exc:
+        fail(f"cannot reach OpenAI: {exc}")
+        return
+
+    if r.status_code == 200:
+        ok(f"reachable, model {s.openai_model} responded")
+        return
+
+    # Each of these is a different fix, and the raw status alone sends you to
+    # the wrong one - a dead model reads like a dead key from the outside.
+    detail = ""
+    code = ""
+    try:
+        error = r.json().get("error") or {}
+        detail = str(error.get("message", ""))[:160]
+        code = str(error.get("code") or error.get("type") or "")
+    except Exception:
+        detail = r.text[:160]
+
+    if r.status_code == 401:
+        fail("OpenAI rejected the API key", "check OPENAI_API_KEY was copied whole")
+    elif code == "insufficient_quota":
+        fail(
+            "the OpenAI credit balance is empty",
+            "top it up at platform.openai.com/settings/organization/billing",
+        )
+    elif r.status_code == 429:
+        warn("rate limited right now", "the key works; this clears on its own")
+    elif r.status_code == 404 or code == "model_not_found":
+        fail(
+            f"model {s.openai_model} is not available to this key",
+            "set OPENAI_MODEL to one your account can use",
+        )
+    elif "temperature" in detail.lower():
+        fail(
+            f"model {s.openai_model} rejects OPENAI_TEMPERATURE={s.openai_temperature}",
+            "leave OPENAI_TEMPERATURE empty for the gpt-5 family",
+        )
+    else:
+        fail(f"OpenAI returned {r.status_code}: {detail}")
 
 
 def _check_groq(s: Any) -> None:
