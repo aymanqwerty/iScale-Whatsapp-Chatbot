@@ -249,6 +249,7 @@ async def list_conversations(
                 User.name,
                 User.profile_name,
                 User.bot_paused,
+                User.blocked,
                 Message.message,
                 Message.sender,
                 Message.timestamp,
@@ -269,8 +270,18 @@ async def list_conversations(
                 "last_message": (text or "")[:120],
                 "last_sender": str(sender),
                 "bot_paused": bool(paused),
+                "blocked": bool(blocked),
             }
-            for phone, name, profile_name, paused, text, sender, timestamp in rows
+            for (
+                phone,
+                name,
+                profile_name,
+                paused,
+                blocked,
+                text,
+                sender,
+                timestamp,
+            ) in rows
         ]
     }
 
@@ -316,6 +327,8 @@ async def get_messages(
         "phone": user.phone,
         "name": user.name or user.profile_name or "",
         "bot_paused": bool(user.bot_paused),
+        "blocked": bool(user.blocked),
+        "blocked_at": _iso(user.blocked_at),
         "can_reply": _within_service_window(last_inbound),
         "window_expires": _iso(_window_end(last_inbound)),
         "messages": [
@@ -343,6 +356,14 @@ async def set_handover(
     payload: HandoverRequest, agent: AgentDep, session: SessionDep
 ) -> dict[str, Any]:
     user = await _get_user(session, payload.phone)
+    if user.blocked:
+        # Neither side of the toggle means anything while blocked: the bot is
+        # silenced regardless, and an agent still could not send. Refusing keeps
+        # the two controls from appearing to contradict each other.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This contact is blocked. Unblock them first.",
+        )
     user.bot_paused = payload.paused
     user.paused_at = datetime.now(UTC) if payload.paused else None
     await session.commit()
@@ -352,6 +373,49 @@ async def set_handover(
         extra={"agent": agent, "paused": payload.paused, "phone": _mask(user.phone)},
     )
     return {"phone": user.phone, "bot_paused": user.bot_paused}
+
+
+# --------------------------------------------------------------------------- #
+# Blocking
+# --------------------------------------------------------------------------- #
+class BlockRequest(BaseModel):
+    phone: str
+    blocked: bool
+
+
+@router.post("/api/block", summary="Block a contact, or let them back in")
+async def set_blocked(
+    payload: BlockRequest, agent: AgentDep, session: SessionDep
+) -> dict[str, Any]:
+    """Stop interacting with this number entirely, or resume.
+
+    Blocking is not a handover. While blocked, anything the number sends is
+    dropped on arrival - not answered, not stored, and not shown to the console
+    - so the contact cannot reach us at all. The transcript from before the
+    block is kept, which is what makes this safe to undo: an agent can read the
+    thread back and see exactly what they blocked.
+
+    The handover flag is left exactly as it was, so unblocking restores the
+    conversation to whoever had it rather than quietly handing an awkward
+    customer back to the bot.
+    """
+    user = await _get_user(session, payload.phone)
+    user.blocked = payload.blocked
+    user.blocked_at = datetime.now(UTC) if payload.blocked else None
+    user.blocked_by = agent if payload.blocked else None
+    await session.commit()
+
+    logger.warning(
+        "Contact blocked" if payload.blocked else "Contact unblocked",
+        extra={"agent": agent, "phone": _mask(user.phone)},
+    )
+    # The list shows a blocked badge, so every open console should repaint.
+    broadcaster.publish(user.phone)
+    return {
+        "phone": user.phone,
+        "blocked": user.blocked,
+        "bot_paused": user.bot_paused,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -373,6 +437,13 @@ async def send_message(
     shows a message the customer did not receive.
     """
     user = await _get_user(session, payload.phone)
+
+    if user.blocked:
+        # Checked before the handover rule so the message names the real reason.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This contact is blocked. Unblock them to reply.",
+        )
 
     if not user.bot_paused:
         # Refusing is kinder than allowing it: the bot would answer the same

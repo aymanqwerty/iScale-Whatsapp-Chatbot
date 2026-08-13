@@ -283,6 +283,22 @@ async def test_a_handed_over_conversation_is_left_alone(harness: Harness) -> Non
     assert await _sweeper(harness).sweep() == 0
 
 
+async def test_a_blocked_contact_is_never_chased(harness: Harness) -> None:
+    """Chasing someone an agent blocked is the worst message this could send."""
+    from app.repositories.user_repository import UserRepository
+
+    await harness.say("hi")
+    await harness.say(reply_id=copy.MENU_COURSES)
+    async with harness.database.session() as session:
+        user = await UserRepository(session).get_by_phone(harness.phone)
+        assert user is not None
+        user.blocked = True
+        await session.commit()
+    await _go_quiet(harness)
+
+    assert await _sweeper(harness).sweep() == 0
+
+
 async def test_waiting_on_us_is_not_their_silence(harness: Harness) -> None:
     """If the user spoke last, the silence is ours - chasing them is absurd."""
     from sqlalchemy import desc, select

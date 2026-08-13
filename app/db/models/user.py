@@ -40,6 +40,21 @@ class User(TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    #: True when an agent has blocked this contact. Deliberately separate from
+    #: `bot_paused`: a pause means "a human is answering instead", a block means
+    #: "nobody answers, and nothing this number sends is even recorded". Keeping
+    #: them apart means unblocking restores whatever the handover state was,
+    #: rather than silently handing an awkward conversation back to the bot.
+    blocked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
+    blocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    #: Console username that blocked them. This is a shared internal login, so
+    #: it is an audit breadcrumb rather than proof of who clicked.
+    blocked_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
     conversations: Mapped[list[Conversation]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",

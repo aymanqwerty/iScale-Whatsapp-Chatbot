@@ -10,8 +10,12 @@ import { avatarStyle, initials, prettyPhone } from "../lib/format";
 import {
   handoverReducer,
   initialHandover,
+  initialToggle,
   isBusy,
   isPaused,
+  toggleBusy,
+  toggleReducer,
+  toggleValue,
 } from "../lib/handover";
 import { useInterval, useLiveUpdates } from "../lib/useLiveUpdates";
 import { ConversationList } from "./ConversationList";
@@ -56,6 +60,14 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
   const handoverRef = useRef(handover);
   handoverRef.current = handover;
 
+  // Blocking is a second boolean with the same two-writer race, so it runs on
+  // the same machine. See the note at the foot of lib/handover.ts.
+  const [block, dispatchBlock] = useReducer(toggleReducer, initialToggle);
+  const blocked = toggleValue(block);
+  const blockBusy = toggleBusy(block);
+  const blockRef = useRef(block);
+  blockRef.current = block;
+
   const notify = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 3200);
@@ -94,7 +106,10 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
     async (phone: string, full: boolean) => {
       if (fetching.current && !full) return;
       fetching.current = true;
+      // Both epochs are read before the request leaves, so a response that
+      // crosses a click can be recognised as older than it.
       const epoch = handoverRef.current.epoch;
+      const blockEpoch = blockRef.current.epoch;
       try {
         const entry = slot(phone);
         const data: ThreadData = await api.messages(
@@ -121,6 +136,11 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
         // The reducer decides whether this is still current. Messages are
         // always applied - they cannot be stale, only incomplete.
         dispatch({ type: "observed", paused: data.bot_paused, epoch });
+        dispatchBlock({
+          type: "observed",
+          paused: data.blocked,
+          epoch: blockEpoch,
+        });
         setCanReply(data.can_reply);
         setHeader({ name: data.name, phone: data.phone });
         if (full || added) setMessages([...entry.messages]);
@@ -142,6 +162,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
       const row = conversations.find((c) => c.phone === phone);
       setHeader({ name: row?.name ?? "", phone });
       dispatch({ type: "reset", paused: row?.bot_paused ?? false });
+      dispatchBlock({ type: "reset", paused: row?.blocked ?? false });
 
       if (entry.messages.length) {
         setMessages([...entry.messages]); // instant, from cache
@@ -184,6 +205,53 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
         rows.map((c) => (c.phone === phone ? { ...c, bot_paused: !want } : c)),
       );
       notify("Could not change the handover. Try again.");
+      guard(err);
+    }
+  }
+
+  /* ---------------- blocking ---------------- */
+  async function toggleBlock() {
+    if (!current || toggleBusy(blockRef.current)) return;
+    const phone = current;
+    const want = !toggleValue(blockRef.current);
+
+    // Confirmed only on the way in. Blocking silently drops everything the
+    // number sends afterwards, which is not something to do on a misclick;
+    // unblocking is harmless and asking twice would just be in the way.
+    if (
+      want &&
+      !window.confirm(
+        `Block ${header.name || prettyPhone(phone)}?\n\n` +
+          "The bot will stop replying and anything they send from now on is " +
+          "ignored — it will not appear here. The messages already in this " +
+          "thread are kept, and you can unblock them at any time.",
+      )
+    ) {
+      return;
+    }
+
+    dispatchBlock({ type: "click" });
+    setConversations((rows) =>
+      rows.map((c) => (c.phone === phone ? { ...c, blocked: want } : c)),
+    );
+
+    try {
+      const result = await api.block(phone, want);
+      dispatchBlock({ type: "confirmed", paused: result.blocked });
+      setConversations((rows) =>
+        rows.map((c) =>
+          c.phone === phone ? { ...c, blocked: result.blocked } : c,
+        ),
+      );
+      notify(want ? "Contact blocked." : "Contact unblocked.");
+    } catch (err) {
+      dispatchBlock({ type: "failed" });
+      setConversations((rows) =>
+        rows.map((c) => (c.phone === phone ? { ...c, blocked: !want } : c)),
+      );
+      notify(
+        want ? "Could not block. Try again." : "Could not unblock. Try again.",
+      );
       guard(err);
     }
   }
@@ -272,11 +340,13 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
     onSignedOut();
   }
 
-  const note = !paused
-    ? "The bot is handling this conversation. Take it over to reply yourself."
-    : !canReply
-      ? "Outside the 24-hour window — WhatsApp will not deliver a reply until the customer messages again."
-      : "You are replying. The bot stays silent until you hand it back.";
+  const note = blocked
+    ? "Blocked. Nothing this number sends reaches us, and nobody replies — unblock to resume."
+    : !paused
+      ? "The bot is handling this conversation. Take it over to reply yourself."
+      : !canReply
+        ? "Outside the 24-hour window — WhatsApp will not deliver a reply until the customer messages again."
+        : "You are replying. The bot stays silent until you hand it back.";
 
   return (
     <div className={`shell${current ? " viewing" : ""}`}>
@@ -346,12 +416,15 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
                 <div className="hsub">{prettyPhone(header.phone || current)}</div>
               </div>
               <div className="spacer" />
+              {/* Hidden rather than disabled while blocked: the handover has no
+                  meaning there, and the server refuses it anyway. */}
               <button
                 className={`btn ${paused ? "give" : "take"}${handoverBusy ? " busy" : ""}`}
                 type="button"
                 onClick={toggleHandover}
                 disabled={handoverBusy}
                 aria-busy={handoverBusy}
+                hidden={blocked}
               >
                 {handoverBusy ? (
                   <span className="spin dark" />
@@ -374,6 +447,39 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
                     ? "Hand back to bot"
                     : "Take over from bot"}
               </button>
+              <button
+                className={`btn block${blocked ? " on" : ""}${blockBusy ? " busy" : ""}`}
+                type="button"
+                onClick={toggleBlock}
+                disabled={blockBusy}
+                aria-busy={blockBusy}
+                title={
+                  blocked
+                    ? "Let this contact reach us again"
+                    : "Stop interacting with this contact entirely"
+                }
+              >
+                {blockBusy ? (
+                  <span className="spin dark" />
+                ) : blocked ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" />
+                  </svg>
+                )}
+                {blockBusy
+                  ? blocked
+                    ? "Blocking…"
+                    : "Unblocking…"
+                  : blocked
+                    ? "Unblock"
+                    : "Block"}
+              </button>
               {/* Closes the VIEW, not the conversation. Nothing is ended, no
                   handover is undone and the customer sees nothing - it just
                   clears the pane, which desktop otherwise had no way to do. */}
@@ -394,8 +500,10 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
             <Thread messages={messages} loading={threadLoading} />
 
             <footer>
-              <div className={`note${!paused ? "" : canReply ? "" : " warn"}`}>{note}</div>
-              <Composer disabled={!paused || !canReply} onSend={send} />
+              <div className={`note${blocked ? " warn" : !paused ? "" : canReply ? "" : " warn"}`}>
+                {note}
+              </div>
+              <Composer disabled={blocked || !paused || !canReply} onSend={send} />
             </footer>
           </>
         ) : (

@@ -89,6 +89,12 @@ def test_everything_requires_a_session(client: TestClient) -> None:
     )
     assert (
         client.post(
+            f"{BASE}/api/block", json={"phone": USER_PHONE, "blocked": True}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
             f"{BASE}/api/send", json={"phone": USER_PHONE, "text": "x"}
         ).status_code
         == 401
@@ -250,6 +256,132 @@ def test_the_bot_sees_what_the_agent_said(client: TestClient) -> None:
     calls = client.app.state.container.answer_service._llm.calls  # type: ignore[attr-defined]
     history = str(calls[-1].get("history", ""))
     assert "Meera here" in history, "the agent's message never reached the model"
+
+
+# --------------------------------------------------------------------------- #
+# Blocking
+# --------------------------------------------------------------------------- #
+def _block(client: TestClient, blocked: bool = True) -> None:
+    response = client.post(
+        f"{BASE}/api/block", json={"phone": USER_PHONE, "blocked": blocked}
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_blocking_drops_the_message_entirely(client: TestClient) -> None:
+    """The difference from a handover: nothing is answered AND nothing is kept.
+
+    A blocked number must not be able to push a real customer down the inbox or
+    grow the transcript, so the message is dropped on arrival rather than
+    recorded silently.
+    """
+    _talk(client, "hi")
+    _login(client)
+    _block(client)
+
+    before = len(client.get(f"{BASE}/api/messages/{USER_PHONE}").json()["messages"])
+    sent_before = len(_outbox(client))
+
+    _talk(client, "buy my seo services")
+
+    thread = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()
+    assert len(thread["messages"]) == before, "a blocked contact's message was stored"
+    assert len(_outbox(client)) == sent_before, "the bot answered a blocked contact"
+    assert thread["blocked"] is True
+
+
+def test_the_history_from_before_the_block_survives(client: TestClient) -> None:
+    """It is what an agent reads back to decide whether to undo the block."""
+    _talk(client, "hi")
+    _login(client)
+    before = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()["messages"]
+    assert before, "nothing to preserve - the test proves nothing"
+
+    _block(client)
+
+    after = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()["messages"]
+    assert [m["text"] for m in after] == [m["text"] for m in before]
+
+
+def test_unblocking_lets_the_bot_answer_again(client: TestClient) -> None:
+    _talk(client, "hi")
+    _login(client)
+    _block(client)
+    _talk(client, "hello?")
+
+    _block(client, blocked=False)
+    before = len(_outbox(client))
+    _talk(client, "hi")
+
+    assert len(_outbox(client)) > before
+
+
+def test_unblocking_restores_the_handover_rather_than_the_bot(
+    client: TestClient,
+) -> None:
+    """An agent who had taken the conversation over still has it afterwards.
+
+    Blocking must not quietly hand an awkward customer back to the bot.
+    """
+    _talk(client, "hi")
+    _login(client)
+    client.post(f"{BASE}/api/handover", json={"phone": USER_PHONE, "paused": True})
+    _block(client)
+    _block(client, blocked=False)
+
+    thread = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()
+    assert thread["bot_paused"] is True, "the handover was lost across a block"
+
+    before = len(_outbox(client))
+    _talk(client, "still there?")
+    assert len(_outbox(client)) == before, "the bot spoke over the agent"
+
+
+def test_an_agent_cannot_message_a_blocked_contact(client: TestClient) -> None:
+    """Blocking is not a handover - it silences our side too."""
+    _talk(client, "hi")
+    _login(client)
+    client.post(f"{BASE}/api/handover", json={"phone": USER_PHONE, "paused": True})
+    _block(client)
+
+    response = client.post(
+        f"{BASE}/api/send", json={"phone": USER_PHONE, "text": "hello"}
+    )
+
+    assert response.status_code == 403
+    assert "blocked" in response.json()["detail"].lower()
+
+
+def test_handover_is_refused_while_blocked(client: TestClient) -> None:
+    """Neither side of that toggle means anything until the block is lifted."""
+    _talk(client, "hi")
+    _login(client)
+    _block(client)
+
+    response = client.post(
+        f"{BASE}/api/handover", json={"phone": USER_PHONE, "paused": True}
+    )
+
+    assert response.status_code == 409
+    assert "unblock" in response.json()["detail"].lower()
+
+
+def test_the_list_shows_who_is_blocked(client: TestClient) -> None:
+    _talk(client, "hi")
+    _login(client)
+    _block(client)
+
+    rows = client.get(f"{BASE}/api/conversations").json()["conversations"]
+    row = next(r for r in rows if r["phone"] == USER_PHONE)
+    assert row["blocked"] is True
+
+
+def test_blocking_an_unknown_number_is_a_404(client: TestClient) -> None:
+    _login(client)
+    response = client.post(
+        f"{BASE}/api/block", json={"phone": "910000000000", "blocked": True}
+    )
+    assert response.status_code == 404
 
 
 # --------------------------------------------------------------------------- #

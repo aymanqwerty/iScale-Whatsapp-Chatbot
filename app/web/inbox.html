@@ -98,6 +98,11 @@
   .badge{display:inline-flex;align-items:center;margin-left:6px;padding:1px 7px;
          border-radius:99px;background:rgba(240,178,50,.15);color:var(--amber);
          font-size:9.5px;font-weight:700;letter-spacing:.05em;vertical-align:middle;}
+  .badge.stop{background:rgba(248,113,113,.16);color:var(--err);}
+  /* Dimmed, not hidden. A blocked contact still has to be findable to be
+     unblocked, but it should not draw the eye like live work does. */
+  .row.blocked .av,.row.blocked .rprev,.row.blocked .rnum{opacity:.45;}
+  .row.blocked .rname{opacity:.7;}
 
   /* ===================== skeletons ===================== */
   .sk{background:linear-gradient(90deg,rgba(255,255,255,.045) 25%,
@@ -125,6 +130,16 @@
   .btn.busy{opacity:1;cursor:progress;filter:saturate(.85) brightness(.95);}
   .btn.take{background:linear-gradient(180deg,#f5bd47,#e0a11f);color:#3b2a00;}
   .btn.give{background:linear-gradient(180deg,#14c98d,#0d9c6d);color:#04231a;}
+  /* Block is destructive, so it stays quiet until pointed at rather than
+     competing with the handover button beside it. */
+  .btn.block{min-width:112px;background:transparent;color:var(--muted);
+    box-shadow:inset 0 0 0 1px var(--line);}
+  .btn.block:hover:not(:disabled){background:rgba(248,113,113,.12);color:var(--err);
+    box-shadow:inset 0 0 0 1px rgba(248,113,113,.4);filter:none;}
+  .btn.block.on{background:linear-gradient(180deg,#f26d6d,#d63e3e);color:#2a0505;
+    box-shadow:none;}
+  .btn.block.on:hover:not(:disabled){background:linear-gradient(180deg,#f58585,#e04c4c);
+    color:#2a0505;box-shadow:none;}
 
   #thread{flex:1;overflow-y:auto;padding:22px 20px 8px;display:flex;flex-direction:column;gap:3px;
           background:radial-gradient(760px 420px at 50% -12%,rgba(56,120,255,.045),transparent 62%),
@@ -232,6 +247,7 @@
     </div>
     <div class="spacer"></div>
     <button class="btn take" id="toggle" type="button"></button>
+    <button class="btn block" id="blockBtn" type="button"></button>
     <!-- Closes the VIEW, not the conversation. Nothing is ended, no handover
          is undone and the customer sees nothing. -->
     <button class="icon close" id="close" type="button"
@@ -272,7 +288,8 @@ const API = '/api/v1/console/api';
 const EMPTY = document.querySelector('#thread .empty').cloneNode(true);
 const $ = (id) => document.getElementById(id);
 
-let current = null, paused = false, canReply = false, convos = [], listLoaded = false;
+let current = null, paused = false, blocked = false, canReply = false;
+let convos = [], listLoaded = false;
 let fetching = false, socket = null, retry = 1000, tempSeq = -1;
 
 // Bumped on every handover. A poll already in flight when the button is pressed
@@ -280,6 +297,11 @@ let fetching = false, socket = null, retry = 1000, tempSeq = -1;
 // after the click - then forward again on the next poll. Comparing this across
 // the await lets a stale response be recognised and discarded.
 let handoverSeq = 0, handoverBusy = false, handoverPending = false;
+
+// Blocking is a second boolean with exactly the same race, so it gets its own
+// copy of the same three guards rather than sharing them - a click on one button
+// must not discard a response belonging to the other.
+let blockSeq = 0, blockBusy = false, blockPending = false;
 
 // Per-conversation cache. Re-opening a thread then paints instantly from memory
 // while the delta fetch runs behind it, so the pane is never blank while the
@@ -399,7 +421,8 @@ function renderList() {
 
   rows.forEach((c) => {
     const row = document.createElement('button');
-    row.className = 'row' + (c.phone === current ? ' active' : '');
+    row.className =
+      'row' + (c.phone === current ? ' active' : '') + (c.blocked ? ' blocked' : '');
     row.type = 'button';
 
     const av = document.createElement('div'); av.className = 'av';
@@ -409,7 +432,13 @@ function renderList() {
     const top = document.createElement('div'); top.className = 'rtop';
     const name = document.createElement('span'); name.className = 'rname';
     name.textContent = c.name || 'Unknown';
-    if (c.bot_paused) {
+    // Blocked and handed-over are both "the bot is quiet here", for opposite
+    // reasons, so they must never wear the same badge.
+    if (c.blocked) {
+      const badge = document.createElement('span');
+      badge.className = 'badge stop'; badge.textContent = 'BLOCKED';
+      name.appendChild(badge);
+    } else if (c.bot_paused) {
       const badge = document.createElement('span');
       badge.className = 'badge'; badge.textContent = 'YOU';
       name.appendChild(badge);
@@ -499,7 +528,7 @@ async function open(phone) {
   paintAvatar($('hAv'), c && c.name, phone);
   $('hWho').textContent = (c && c.name) || 'Unknown';
   $('hSub').textContent = prettyPhone(phone);
-  if (c) { paused = !!c.bot_paused; paintControls(); }
+  if (c) { paused = !!c.bot_paused; blocked = !!c.blocked; paintControls(); }
 
   const st = state(phone);
   if (st.msgs.length) paintThread(phone);               // instant, from cache
@@ -512,7 +541,7 @@ async function refresh(full) {
   if (fetching && !full) return;
   fetching = true;
   const phone = current, st = state(phone);
-  const seq = handoverSeq;
+  const seq = handoverSeq, bseq = blockSeq;
   try {
     const r = await api(
       '/messages/' + encodeURIComponent(phone) + '?after_id=' + (full ? 0 : st.lastId)
@@ -526,6 +555,7 @@ async function refresh(full) {
     // request was in flight. Messages are always applied - they cannot be
     // stale, only incomplete.
     if (!handoverPending && handoverSeq === seq) paused = d.bot_paused;
+    if (!blockPending && blockSeq === bseq) blocked = d.blocked;
     canReply = d.can_reply;
     $('hWho').textContent = d.name || 'Unknown';
     $('hSub').textContent = prettyPhone(d.phone);
@@ -543,13 +573,30 @@ function paintControls() {
     : (paused ? 'Hand back to bot' : 'Take over from bot');
   t.className = 'btn ' + (paused ? 'give' : 'take') + (handoverBusy ? ' busy' : '');
   t.disabled = handoverBusy;
+  // Hidden rather than disabled while blocked: the handover has no meaning
+  // there, and the server refuses it anyway.
+  t.hidden = blocked;
 
-  const usable = paused && canReply;
+  const b = $('blockBtn');
+  b.textContent = blockBusy
+    ? (blocked ? 'Blocking…' : 'Unblocking…')
+    : (blocked ? 'Unblock' : 'Block');
+  b.className = 'btn block' + (blocked ? ' on' : '') + (blockBusy ? ' busy' : '');
+  b.disabled = blockBusy;
+  b.title = blocked
+    ? 'Let this contact reach us again'
+    : 'Stop interacting with this contact entirely';
+
+  const usable = paused && canReply && !blocked;
   $('send').disabled = !usable;
   $('text').disabled = !usable;
 
   const note = $('note');
-  if (!paused) {
+  if (blocked) {
+    note.className = 'note warn';
+    note.textContent =
+      'Blocked. Nothing this number sends reaches us, and nobody replies — unblock to resume.';
+  } else if (!paused) {
     note.className = 'note';
     note.textContent = 'The bot is handling this conversation. Take it over to reply yourself.';
   } else if (!canReply) {
@@ -611,6 +658,54 @@ $('toggle').addEventListener('click', async () => {
   } finally {
     handoverPending = false;
     handoverBusy = false;
+    paintControls();
+  }
+});
+
+// Same three guards as the handover button, for the same reason: the click and
+// the background poll are two writers over one boolean, and without this the
+// button flips back a moment after it is pressed.
+$('blockBtn').addEventListener('click', async () => {
+  if (!current || blockPending) return;
+  const phone = current, want = !blocked;
+  const row = convos.find((c) => c.phone === phone);
+
+  // Confirmed only on the way in. Blocking silently drops everything the number
+  // sends afterwards, which is not something to do on a misclick; unblocking is
+  // harmless and asking twice would just be in the way.
+  if (want && !confirm(
+    'Block ' + ((row && row.name) || prettyPhone(phone)) + '?\n\n' +
+    'The bot will stop replying and anything they send from now on is ignored ' +
+    '— it will not appear here. The messages already in this thread are kept, ' +
+    'and you can unblock them at any time.'
+  )) return;
+
+  blockPending = true;
+  blockSeq += 1;
+  blockBusy = true;
+  blocked = want; paintControls();
+  if (row) { row.blocked = want; renderList(); }
+
+  try {
+    const r = await api('/block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone, blocked: want }),
+    });
+    if (!r.ok) throw new Error();
+    const saved = await r.json();
+    blockSeq += 1;
+    blocked = saved.blocked; paused = saved.bot_paused; paintControls();
+    if (row) { row.blocked = saved.blocked; renderList(); }
+    toast(want ? 'Contact blocked.' : 'Contact unblocked.');
+  } catch (err) {
+    blockSeq += 1;
+    blocked = !want; paintControls();
+    if (row) { row.blocked = !want; renderList(); }
+    toast(want ? 'Could not block. Try again.' : 'Could not unblock. Try again.');
+  } finally {
+    blockPending = false;
+    blockBusy = false;
     paintControls();
   }
 });
