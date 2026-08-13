@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(psql *)",
-      "Bash(PYTHONIOENCODING=utf-8 PYTHONPATH=C:/Users/USER/Desktop/iScale-chatbot .venv/Scripts/python.exe -c ' *)"
-    ]
-  }
-}

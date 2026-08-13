@@ -27,6 +27,11 @@ htmlcov/
 .vscode/
 .DS_Store
 
+# Claude Code's per-machine settings. Never committed: approving a command
+# writes that command into this file verbatim, so any secret passed inline on a
+# command line ends up here. That is exactly what GitHub push protection caught.
+.claude/settings.local.json
+
 # Frontend build output and dependencies
 frontend/node_modules/
 frontend/dist/
