@@ -72,7 +72,13 @@ class Settings(BaseSettings):
     # --- Gemini (LLM) ------------------------------------------------------
     gemini_api_key: SecretStr = SecretStr("")
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    gemini_model: str = "gemini-2.5-flash"
+    #: Not 2.5-flash. Google retired that family for projects created after the
+    #: cutoff: a new key authenticates fine, lists the model, then fails the
+    #: actual call with "no longer available to new users" - which reads like a
+    #: broken key and is not. Flash-Lite also costs a fraction of 3.5-flash
+    #: ($0.25/$1.50 against $1.50/$9.00 per 1M) for answers this bot grounds in
+    #: the knowledge base anyway, and it still honours `thinkingBudget`.
+    gemini_model: str = "gemini-3.1-flash-lite"
     gemini_temperature: float = 0.3
     gemini_max_output_tokens: int = 512
     gemini_timeout_seconds: float = 20.0
