@@ -26,6 +26,7 @@ from app.services.llm.answer_service import AnswerService
 from app.services.llm.base import LLMClient
 from app.services.llm.gemini import GeminiClient
 from app.services.llm.groq import GroqClient
+from app.services.llm.openai import OpenAIClient
 from app.services.scheduling.callback_time import CallbackTimeValidator
 from app.services.whatsapp.allowlist import PhoneAllowlist
 from app.services.whatsapp.base import MessagingClient
@@ -82,9 +83,12 @@ class Container:
         if settings.llm_provider == "groq":
             llm: LLMClient = GroqClient(settings)
             model = settings.groq_model
-        else:
+        elif settings.llm_provider == "gemini":
             llm = GeminiClient(settings)
             model = settings.gemini_model
+        else:
+            llm = OpenAIClient(settings)
+            model = settings.openai_model
         logger.info(
             "LLM provider selected",
             extra={"provider": settings.llm_provider, "model": model},

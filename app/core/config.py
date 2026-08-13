@@ -67,7 +67,27 @@ class Settings(BaseSettings):
     #: `LLMClient` protocol, so switching is an environment variable and a
     #: restart - no redeploy of different code, and no way for the two to drift
     #: apart in behaviour.
-    llm_provider: Literal["gemini", "groq"] = "gemini"
+    llm_provider: Literal["openai", "gemini", "groq"] = "openai"
+
+    # --- OpenAI (LLM) ------------------------------------------------------
+    openai_api_key: SecretStr = SecretStr("")
+    openai_base_url: str = "https://api.openai.com/v1"
+    #: gpt-4o-mini is the balance point for this bot. Every answer is grounded
+    #: in a knowledge snippet already, so raw model strength buys less here than
+    #: it would on an open-ended task, and the nano tier's weaker instruction
+    #: following shows up first in exactly what this bot is judged on - tone and
+    #: structure. Roughly a third the cost of gpt-4.1-mini; see docs/llm.md for
+    #: the measured per-message figures and the cheaper/stronger alternatives.
+    openai_model: str = "gpt-4o-mini"
+    #: None omits the field entirely. The gpt-5 family accepts only its default
+    #: and 400s on anything else, so `OPENAI_TEMPERATURE=` (empty) is what makes
+    #: those models usable without touching code.
+    openai_temperature: float | None = 0.3
+    openai_max_output_tokens: int = 512
+    openai_timeout_seconds: float = 20.0
+    #: Only needed for keys that belong to more than one org or project.
+    openai_organization: str = ""
+    openai_project: str = ""
 
     # --- Gemini (LLM) ------------------------------------------------------
     gemini_api_key: SecretStr = SecretStr("")
