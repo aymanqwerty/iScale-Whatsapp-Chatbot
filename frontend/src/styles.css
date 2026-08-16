@@ -308,12 +308,11 @@ footer{background:var(--panel);border-top:1px solid var(--line);padding:11px 20p
   font-size:14.2px;line-height:1.45;resize:none;max-height:132px;min-height:44px;}
 .composer textarea:disabled{opacity:.45;cursor:not-allowed;}
 .composer .btn.send{border-radius:14px;padding:0 20px;height:44px;min-width:120px;}
-@media (max-width:520px){
-  .composer .btn.send{min-width:52px;padding:0 14px;}
-  .composer .btn.send .label{display:none;}
-  header .btn{min-width:0;padding:9px 12px;}
-  header .btn span:not(.spin){display:none;}
-}
+/* Header identity block. `min-width:0` is what lets a long name shrink instead
+   of shoving the action buttons off the right edge - flex items refuse to go
+   below their content width without it. */
+.hwho{min-width:0;flex:1;}
+.hname,.hsub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 .empty{margin:auto;text-align:center;color:var(--faint);max-width:300px;}
 .empty .big{width:56px;height:56px;border-radius:16px;margin:0 auto 16px;
@@ -329,12 +328,77 @@ footer{background:var(--panel);border-top:1px solid var(--line);padding:11px 20p
 .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto;}
 
 .backbtn{display:none;}
+
+/* ===================== small screens ===================== */
+
+/* A touch device has no hover, so a control revealed by it is a control that
+   does not exist. The row chevron is the only way to reach Pin and Rename, so
+   on touch it is simply always visible - and given a finger-sized target. */
+@media (hover:none){
+  .rowchev{opacity:1;pointer-events:auto;width:32px;height:32px;top:6px;}
+  .row{padding-right:44px;}
+}
+
+/* One pane at a time, the way a phone messaging app works. */
 @media (max-width:820px){
   :root{--sidebar:100%;}
   aside{position:absolute;inset:0;z-index:20;}
   .shell.viewing aside{display:none;}
   .backbtn{display:grid;}
 }
+
+@media (max-width:560px){
+  /* Dynamic viewport height. On iOS Safari `100%` is measured against the
+     window WITH the address bar showing, so the composer sat below the fold
+     until the bar collapsed. `dvh` tracks the bar as it moves. */
+  html,body,#root{height:100dvh;}
+  .shell{height:100dvh;}
+
+  /* Icon-only actions. Three labelled buttons plus an avatar and a name never
+     fit across a phone, and the icons already say take-over / block / close. */
+  header{padding:10px 12px;gap:9px;min-height:58px;}
+  /* `.btn.block` is two classes and outranks `header .btn`, so its 112px
+     min-width survived and kept the button oversized. Matched here at equal
+     weight rather than reached for with !important. */
+  header .btn,header .btn.block{min-width:0;padding:9px 11px;gap:0;}
+  header .btn .label{display:none;}
+  .icon.close{width:34px;height:34px;}
+  .av{width:34px;height:34px;font-size:12.5px;}
+  .hname{font-size:14px;}
+
+  /* 16px is the threshold below which iOS zooms the page on focus, which then
+     leaves the layout scrolled sideways. Worth the slightly larger text. */
+  .composer textarea,.searchwrap input,.dialog input,.card input{font-size:16px;}
+
+  .thread{padding:14px 12px 6px;}
+  .msg{max-width:88%;}
+  footer{padding:9px 12px 12px;}
+  .composer .btn.send{min-width:52px;padding:0 14px;}
+  .composer .btn.send .label{display:none;}
+
+  /* Stacked: side by side, the text was squeezed to two words per line with a
+     button wider than it. */
+  .paybar{flex-direction:column;align-items:stretch;gap:9px;padding:11px 12px;}
+  .paybar button{width:100%;padding:9px;}
+
+  .list{padding:0 6px 12px;}
+  .row{padding:10px 8px;gap:10px;}
+  .brand{padding:13px 12px 12px;}
+  .searchwrap{padding:10px 10px 8px;}
+
+  /* Anchored to the bottom rather than centred: a dialog centred in a short
+     viewport ends up under the on-screen keyboard the moment the field
+     focuses. */
+  .scrim{place-items:end center;padding:0;}
+  .dialog{width:100%;border-radius:16px 16px 0 0;padding:20px 18px
+    calc(18px + env(safe-area-inset-bottom));}
+  .dialog .actions{flex-wrap:wrap;}
+
+  .rowmenu{min-width:190px;}
+  .attach{max-width:78%;}
+  .card{padding:30px 22px 24px;}
+}
+
 @media (prefers-reduced-motion:reduce){
   *{animation:none !important;transition:none !important;scroll-behavior:auto !important;}
 }

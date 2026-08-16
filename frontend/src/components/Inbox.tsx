@@ -488,7 +488,9 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
               <div className="av" style={avatarStyle(header.phone || current)}>
                 {initials(header.name, header.phone || current)}
               </div>
-              <div>
+              {/* min-width:0 via .hwho - without it a long name refuses to
+                  shrink and pushes the action buttons off a phone screen. */}
+              <div className="hwho">
                 <div className="hname">{header.name || "Unknown"}</div>
                 <div className="hsub">{prettyPhone(header.phone || current)}</div>
               </div>
@@ -516,13 +518,18 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
                     <path d="M20 6H9a4 4 0 0 0 0 8h6a4 4 0 0 1 0 8H4" />
                   </svg>
                 )}
-                {handoverBusy
-                  ? paused
-                    ? "Taking over…"
-                    : "Handing back…"
-                  : paused
-                    ? "Hand back to bot"
-                    : "Take over from bot"}
+                {/* Wrapped so a narrow screen can drop the words and keep the
+                    icon. As a bare text node there was nothing to select, and
+                    the mobile rule that hides it silently did nothing. */}
+                <span className="label">
+                  {handoverBusy
+                    ? paused
+                      ? "Taking over…"
+                      : "Handing back…"
+                    : paused
+                      ? "Hand back to bot"
+                      : "Take over from bot"}
+                </span>
               </button>
               <button
                 className={`btn block${blocked ? " on" : ""}${blockBusy ? " busy" : ""}`}
@@ -549,13 +556,15 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
                     <circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" />
                   </svg>
                 )}
-                {blockBusy
-                  ? blocked
-                    ? "Blocking…"
-                    : "Unblocking…"
-                  : blocked
-                    ? "Unblock"
-                    : "Block"}
+                <span className="label">
+                  {blockBusy
+                    ? blocked
+                      ? "Blocking…"
+                      : "Unblocking…"
+                    : blocked
+                      ? "Unblock"
+                      : "Block"}
+                </span>
               </button>
               {/* Closes the VIEW, not the conversation. Nothing is ended, no
                   handover is undone and the customer sees nothing - it just

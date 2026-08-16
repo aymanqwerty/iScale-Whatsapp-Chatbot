@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark">
 <title>iScale Console</title>
@@ -163,8 +163,14 @@
   main{flex:1;display:flex;flex-direction:column;min-width:0;}
   header{display:flex;align-items:center;gap:12px;padding:12px 20px;
          background:var(--panel);border-bottom:1px solid var(--line);min-height:65px;}
-  header .hname{font-size:15px;font-weight:650;letter-spacing:-.01em;}
-  header .hsub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:1px;}
+  /* min-width:0 is what lets a long name shrink instead of shoving the action
+     buttons off the right edge - a flex item will not go below its content
+     width without it. */
+  header .hwho{min-width:0;flex:1;}
+  header .hname{font-size:15px;font-weight:650;letter-spacing:-.01em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  header .hsub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;
+    margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .spacer{flex:1;}
   .btn{border:0;border-radius:10px;padding:9px 15px;font-size:13px;font-weight:650;
        cursor:pointer;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:7px;
@@ -256,11 +262,60 @@
   .toast.show{opacity:1;transform:translate(-50%,0);}
 
   .backbtn{display:none;}
+  /* A touch device has no hover, so a control revealed by it is a control that
+     does not exist. The chevron is the only route to Pin and Rename, so on
+     touch it is always visible - and finger-sized. */
+  @media (hover:none){
+    .rowchev{opacity:1;pointer-events:auto;width:32px;height:32px;top:6px;}
+    .row{padding-right:44px;}
+  }
+
   @media (max-width:820px){
     :root{--sidebar:100%;}
     aside{position:absolute;inset:0;z-index:20;}
     body.viewing aside{display:none;}
     .backbtn{display:grid;}
+  }
+
+  @media (max-width:560px){
+    /* On iOS Safari `100%` is measured with the address bar showing, so the
+       composer sat below the fold until the bar collapsed. `dvh` tracks it. */
+    html,body{height:100dvh;}
+
+    header{padding:10px 12px;gap:9px;min-height:58px;}
+    /* `.btn.block` is two classes and outranks `header .btn`, so its 112px
+       min-width survived and pushed the header past a 360px screen. Matched
+       here at higher weight rather than reached for with !important. */
+    header .btn,header .btn.block{min-width:0;padding:9px 10px;font-size:12.5px;}
+    header .av{width:34px;height:34px;font-size:12.5px;}
+    header .hname{font-size:14px;}
+    .icon.close{width:34px;height:34px;}
+
+    /* 16px is the threshold below which iOS zooms the page on focus, which
+       then leaves the layout scrolled sideways. */
+    #text,#search,.dialog input{font-size:16px;}
+
+    #thread{padding:14px 12px 6px;}
+    .msg{max-width:88%;}
+    #foot{padding:9px 12px 12px;}
+
+    /* Stacked: side by side the text was squeezed to two words a line with a
+       button wider than it. */
+    .paybar{flex-direction:column;align-items:stretch;gap:9px;padding:11px 12px;}
+    .paybar button{width:100%;padding:9px;}
+
+    #list{padding:0 6px 12px;}
+    .row{padding:10px 8px;gap:10px;}
+    .brand{padding:13px 12px 12px;}
+    .searchwrap{padding:10px 10px 8px;}
+
+    /* Anchored to the bottom: a centred dialog ends up under the on-screen
+       keyboard the moment the field focuses. */
+    .scrim{place-items:end center;padding:0;}
+    .dialog{width:100%;border-radius:16px 16px 0 0;
+      padding:20px 18px calc(18px + env(safe-area-inset-bottom));}
+    .rowmenu{min-width:190px;}
+    .attach{max-width:78%;}
   }
   @media (prefers-reduced-motion:reduce){
     *{animation:none !important;transition:none !important;scroll-behavior:auto !important;}
@@ -305,7 +360,7 @@
       </svg>
     </button>
     <div class="av" id="hAv"></div>
-    <div>
+    <div class="hwho">
       <div class="hname" id="hWho"></div>
       <div class="hsub" id="hSub"></div>
     </div>
@@ -385,6 +440,10 @@ let handoverSeq = 0, handoverBusy = false, handoverPending = false;
 // copy of the same three guards rather than sharing them - a click on one button
 // must not discard a response belonging to the other.
 let blockSeq = 0, blockBusy = false, blockPending = false;
+
+// Header labels shorten below this. Watched rather than read once, so rotating
+// a phone re-renders them instead of leaving the desktop wording in place.
+const SMALL = matchMedia('(max-width:560px)');
 
 // Per-conversation cache. Re-opening a thread then paints instantly from memory
 // while the delta fetch runs behind it, so the pane is never blank while the
@@ -713,9 +772,14 @@ async function refresh(full) {
 
 function paintControls() {
   const t = $('toggle');
+  // Unlike the React console these buttons have no icon, so a narrow screen
+  // cannot simply drop the words - an empty button is worse than a cramped
+  // one. Shorter labels instead.
   t.textContent = handoverBusy
     ? (paused ? 'Taking over…' : 'Handing back…')
-    : (paused ? 'Hand back to bot' : 'Take over from bot');
+    : SMALL.matches
+      ? (paused ? 'Hand back' : 'Take over')
+      : (paused ? 'Hand back to bot' : 'Take over from bot');
   t.className = 'btn ' + (paused ? 'give' : 'take') + (handoverBusy ? ' busy' : '');
   t.disabled = handoverBusy;
   // Hidden rather than disabled while blocked: the handover has no meaning
@@ -930,6 +994,7 @@ document.addEventListener('mousedown', (ev) => {
   if (!$('rowmenu').contains(ev.target)) closeRowMenu();
 });
 addEventListener('resize', closeRowMenu);
+SMALL.addEventListener('change', () => { if (current) paintControls(); });
 $('list').addEventListener('scroll', closeRowMenu);
 
 async function togglePin(c) {
