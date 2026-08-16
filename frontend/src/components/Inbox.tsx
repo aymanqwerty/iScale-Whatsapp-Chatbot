@@ -18,6 +18,7 @@ import {
   toggleValue,
 } from "../lib/handover";
 import { useInterval, useLiveUpdates } from "../lib/useLiveUpdates";
+import { RenameDialog, RowMenu, type RowMenuTarget } from "./RowMenu";
 import { ConversationList } from "./ConversationList";
 import { Composer } from "./Composer";
 import { EmptyThread, Thread } from "./Thread";
@@ -42,6 +43,8 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
   const [canReply, setCanReply] = useState(false);
   const [payment, setPayment] = useState(false);
   const [toast, setToast] = useState("");
+  const [menu, setMenu] = useState<RowMenuTarget | null>(null);
+  const [renaming, setRenaming] = useState<Conversation | null>(null);
 
   const cache = useRef(new Map<string, Cached>());
   // Guards against two fetches for the same thread overlapping: the second
@@ -259,6 +262,46 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
     }
   }
 
+  /* ---------------- pin & rename ---------------- */
+  async function togglePin(row: Conversation) {
+    const want = !row.pinned;
+    setMenu(null);
+    // Applied first, then confirmed. The list re-sorts pinned-first on the next
+    // poll; showing that instantly is the whole point of the action.
+    setConversations((rows) =>
+      rows.map((c) => (c.phone === row.phone ? { ...c, pinned: want } : c)),
+    );
+    try {
+      await api.pin(row.phone, want);
+      loadConversations();
+    } catch (err) {
+      setConversations((rows) =>
+        rows.map((c) => (c.phone === row.phone ? { ...c, pinned: !want } : c)),
+      );
+      notify("Could not change the pin. Try again.");
+      guard(err);
+    }
+  }
+
+  async function saveRename(phone: string, name: string) {
+    setRenaming(null);
+    try {
+      const saved = await api.rename(phone, name);
+      setConversations((rows) =>
+        rows.map((c) =>
+          c.phone === phone ? { ...c, name: saved.name, alias: saved.alias } : c,
+        ),
+      );
+      if (currentRef.current === phone) {
+        setHeader((h) => ({ ...h, name: saved.name }));
+      }
+      notify(name ? "Contact renamed." : "Name reset.");
+    } catch (err) {
+      notify("Could not rename. Try again.");
+      guard(err);
+    }
+  }
+
   /* ---------------- payment verification ---------------- */
   async function clearPayment() {
     if (!current) return;
@@ -415,6 +458,15 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
           current={current}
           query={query}
           onSelect={open}
+          onMenu={(conversation, x, y) =>
+            setMenu({
+              phone: conversation.phone,
+              name: conversation.name,
+              pinned: conversation.pinned,
+              x,
+              y,
+            })
+          }
         />
       </aside>
 
@@ -549,6 +601,32 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
           <EmptyThread />
         )}
       </main>
+
+      {menu && (
+        <RowMenu
+          target={menu}
+          onClose={() => setMenu(null)}
+          onPin={() => {
+            const row = conversations.find((c) => c.phone === menu.phone);
+            if (row) togglePin(row);
+          }}
+          onRename={() => {
+            const row = conversations.find((c) => c.phone === menu.phone);
+            setMenu(null);
+            if (row) setRenaming(row);
+          }}
+        />
+      )}
+
+      {renaming && (
+        <RenameDialog
+          phone={prettyPhone(renaming.phone)}
+          current={renaming.alias}
+          fallback={renaming.name}
+          onClose={() => setRenaming(null)}
+          onSave={(name) => saveRename(renaming.phone, name)}
+        />
+      )}
 
       <div className={`toast${toast ? " show" : ""}`}>{toast}</div>
     </div>

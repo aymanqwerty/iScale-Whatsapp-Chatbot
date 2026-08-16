@@ -138,6 +138,63 @@ aside{
 /* Green, not amber: this is money arriving, which is good news, and it must not
    read as another warning next to BLOCKED. */
 .badge.pay{background:rgba(16,185,129,.16);color:var(--accent);}
+
+/* ---------- row chevron + its menu ---------- */
+.row{position:relative;}
+/* Hidden until hover, like WhatsApp's own - but kept mounted and revealed on
+   focus, so it is reachable by keyboard rather than mouse-only. */
+.rowchev{
+  position:absolute;top:8px;right:6px;width:24px;height:24px;
+  display:grid;place-items:center;border:0;border-radius:7px;padding:0;
+  background:var(--raised);color:var(--muted);cursor:pointer;
+  opacity:0;pointer-events:none;transition:opacity .13s,color .13s,background .13s;
+}
+.row:hover .rowchev,.rowchev:focus-visible{opacity:1;pointer-events:auto;}
+.rowchev:hover{background:var(--line);color:var(--text);}
+.rowchev:focus-visible{outline:none;box-shadow:0 0 0 2.5px var(--accent-soft);}
+.pinmark{display:inline-flex;color:var(--faint);margin:2px 0 0;}
+.row.pinned{background:rgba(255,255,255,.022);}
+
+/* Fixed, not absolute: the list is an overflow container and would clip a menu
+   opened on the last row. */
+.rowmenu{
+  position:fixed;z-index:60;min-width:172px;padding:5px;
+  background:var(--raised);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 18px 44px -14px rgba(0,0,0,.8);
+  animation:menuin .12s ease-out;
+}
+@keyframes menuin{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
+.rowmenu button{
+  display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;
+  border:0;border-radius:8px;background:transparent;color:var(--text);
+  font-size:13.5px;text-align:left;cursor:pointer;transition:background .12s;
+}
+.rowmenu button:hover{background:var(--panel2);}
+.rowmenu button svg{color:var(--muted);flex-shrink:0;}
+
+/* ---------- rename dialog ---------- */
+.scrim{position:fixed;inset:0;z-index:70;display:grid;place-items:center;
+  background:rgba(4,6,10,.6);padding:20px;animation:menuin .14s ease-out;}
+.dialog{width:min(400px,100%);padding:24px;border-radius:16px;
+  background:linear-gradient(180deg,#161b23 0%,var(--panel) 100%);
+  border:1px solid var(--line);box-shadow:0 30px 80px -20px rgba(0,0,0,.9);}
+.dialog h2{margin:0 0 6px;font-size:17px;font-weight:650;letter-spacing:-.02em;}
+.dialog .sub{margin:0 0 18px;font-size:12.5px;color:var(--muted);line-height:1.5;}
+.dialog input{width:100%;padding:11px 13px;border-radius:10px;font-size:14.5px;
+  border:1px solid var(--line);background:var(--bg);color:var(--text);
+  transition:border-color .16s,box-shadow .16s;}
+.dialog input:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3.5px var(--accent-soft);}
+.dialog .actions{display:flex;align-items:center;gap:8px;margin-top:18px;}
+.dialog .actions .spacer{flex:1;}
+.dialog button{border:0;border-radius:9px;padding:9px 15px;font-size:13px;
+  font-weight:600;cursor:pointer;transition:filter .16s,background .14s;}
+.dialog button.ghost{background:transparent;color:var(--muted);
+  box-shadow:inset 0 0 0 1px var(--line);}
+.dialog button.ghost:hover{background:var(--panel2);color:var(--text);}
+.dialog button.primary{background:linear-gradient(180deg,#14c98d,#0d9c6d);
+  color:#04231a;font-weight:650;}
+.dialog button.primary:hover{filter:brightness(1.08);}
 /* Dimmed, not hidden. A blocked contact still has to be findable to be
    unblocked, but it should not draw the eye like live work does. */
 .row.blocked .av,.row.blocked .rprev,.row.blocked .rnum{opacity:.45;}
@@ -195,6 +252,17 @@ header{display:flex;align-items:center;gap:12px;padding:12px 20px;
 .btn.block.on:hover:not(:disabled){background:linear-gradient(180deg,#f58585,#e04c4c);
   color:#2a0505;box-shadow:0 6px 18px -10px rgba(214,62,62,.9);}
 .spin.dark{border-color:rgba(0,0,0,.25);border-top-color:currentColor;}
+
+/* Payment screenshots. Capped so a tall phone screenshot cannot take over the
+   pane - clicking opens the full size in a new tab. */
+.attach{display:block;margin:2px 0 7px;border-radius:10px;overflow:hidden;
+  max-width:260px;line-height:0;}
+.attach img{display:block;width:100%;height:auto;max-height:340px;
+  object-fit:cover;cursor:zoom-in;}
+.attach.sk{width:200px;height:150px;line-height:normal;}
+.attach.failed{padding:10px 12px;background:rgba(255,255,255,.05);
+  border-radius:10px;font-size:12px;color:var(--faint);line-height:normal;
+  max-width:220px;}
 
 /* Sits between the header and the transcript so it cannot be scrolled past. */
 .paybar{display:flex;align-items:center;gap:12px;padding:11px 20px;

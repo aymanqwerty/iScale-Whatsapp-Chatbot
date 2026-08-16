@@ -181,14 +181,29 @@ class Harness:
         await self.service.process_inbound(inbound)
         return [message for _, message in self.messaging.sent[before:]]
 
-    async def send_media(self, media_type: str = "image") -> list[OutboundMessage]:
-        """Send a payload we cannot read as text - a screenshot, say."""
+    async def send_media(
+        self,
+        media_type: str = "image",
+        *,
+        data: bytes | None = None,
+        mime: str = "image/jpeg",
+    ) -> list[OutboundMessage]:
+        """Send a payload we cannot read as text - a screenshot, say.
+
+        `data` stubs what Cloud API would hand back for this attachment, so the
+        download-and-store path can be exercised without a network call.
+        """
         before = len(self.messaging.sent)
+        media_id = f"media.{uuid.uuid4().hex}" if data is not None else None
+        if data is not None and media_id is not None:
+            self.messaging.media[media_id] = (data, mime)
         inbound = InboundMessage(
             wa_message_id=f"wamid.{uuid.uuid4().hex}",
             from_phone=self.phone,
             kind=MessageKind.UNSUPPORTED,
             media_type=media_type,
+            media_id=media_id,
+            media_mime=mime if data is not None else None,
             timestamp=datetime.now(),
         )
         await self.service.process_inbound(inbound)

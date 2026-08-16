@@ -44,7 +44,12 @@ async def test_the_offer_advertises_the_better_direct_price(harness: Harness) ->
     replies = await _reach_the_offer(harness)
     text = " ".join(r.text for r in replies).lower()
 
-    assert "lowest price" in text, "the direct-payment route was never mentioned"
+    # Asserted on meaning, not wording - this copy gets tuned often, and a test
+    # that pins the exact sentence just breaks every time it improves.
+    assert "payment link" in text, "the direct-payment route was never offered"
+    assert any(
+        word in text for word in ("cheaper", "biggest discount", "best price")
+    ), "nothing said the direct route is better"
     assert str(OFFER["coupon_code"]).lower() in text, "the coupon vanished"
 
 
@@ -159,6 +164,68 @@ async def test_the_screenshot_raises_a_flag_for_the_team(harness: Harness) -> No
         user = await UserRepository(session).get_by_phone(harness.phone)
         assert user is not None
         assert user.payment_proof_at is not None, "the team would never see it"
+
+
+async def test_the_screenshot_itself_is_stored(harness: Harness) -> None:
+    """There is no WhatsApp app on our side to open the picture in.
+
+    Cloud API keeps media on Meta's servers behind the access token and expires
+    it, so a screenshot that is not pulled down and stored is simply lost - and
+    the team is asked to verify a payment they cannot see.
+    """
+    from sqlalchemy import desc, select
+
+    from app.db.models.message import Message
+
+    await _reach_the_offer(harness)
+    await harness.say(reply_id=copy.OFFER_PAY_NOW)
+    await harness.send_media("image", data=b"\xff\xd8\xff-fake-jpeg", mime="image/jpeg")
+
+    async with harness.database.session() as session:
+        row = (
+            await session.execute(
+                select(Message)
+                .where(Message.media_data.is_not(None))
+                .order_by(desc(Message.id))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+    assert row is not None, "the screenshot was never stored"
+    assert row.media_data == b"\xff\xd8\xff-fake-jpeg"
+    assert row.media_mime == "image/jpeg"
+
+
+async def test_an_image_we_cannot_fetch_still_acknowledges(harness: Harness) -> None:
+    """A failed download must not fail the turn.
+
+    The customer has just paid us; the worst possible response is an error.
+    """
+    await _reach_the_offer(harness)
+    await harness.say(reply_id=copy.OFFER_PAY_NOW)
+
+    # No stubbed bytes, so download_media returns None.
+    replies = await harness.send_media("image")
+    text = " ".join(r.text for r in replies).lower()
+
+    assert "team" in text, "the acknowledgement was lost with the download"
+
+
+async def test_an_ordinary_image_is_not_stored(harness: Harness) -> None:
+    """Only payment proofs. Otherwise anyone can fill the database with pictures."""
+    from sqlalchemy import select
+
+    from app.db.models.message import Message
+
+    await harness.say("hi")
+    await harness.send_media("image", data=b"not-a-payment", mime="image/png")
+
+    async with harness.database.session() as session:
+        stored = (
+            await session.execute(select(Message).where(Message.media_data.is_not(None)))
+        ).scalars().all()
+
+    assert not stored, "an unsolicited image was stored"
 
 
 async def test_the_screenshot_is_visible_in_the_transcript(harness: Harness) -> None:

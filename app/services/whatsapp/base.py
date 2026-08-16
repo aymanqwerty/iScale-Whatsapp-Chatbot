@@ -27,6 +27,15 @@ class MessagingClient(Protocol):
         """
         ...
 
+    async def download_media(self, media_id: str) -> tuple[bytes, str] | None:
+        """Fetch an attachment's bytes and mime type, or None if unavailable.
+
+        Cloud API keeps media on Meta's servers behind the access token and
+        expires it, so anything worth keeping - a payment screenshot, say - has
+        to be pulled down and stored while it still exists.
+        """
+        ...
+
     async def close(self) -> None:
         """Release network resources."""
         ...

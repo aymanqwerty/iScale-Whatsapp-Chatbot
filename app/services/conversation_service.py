@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.core.events import broadcaster
 from app.core.logging import get_logger
 from app.db.session import Database
+from app.db.models.message import Message
 from app.domain.enums import MessageSender
 from app.domain.messaging import InboundMessage, OutboundMessage, TurnResult
 from app.repositories.conversation_repository import ConversationRepository
@@ -34,6 +35,11 @@ from app.services.whatsapp.base import MessagingClient
 logger = get_logger(__name__)
 
 
+#: Ceiling on a stored attachment. A payment screenshot is a few hundred KB;
+#: WhatsApp itself caps images at 5 MB, so this refuses only the pathological.
+MAX_MEDIA_BYTES = 5 * 1024 * 1024
+
+
 def _transcript_text(inbound: InboundMessage) -> str:
     """What the console should show for this message.
 
@@ -45,7 +51,10 @@ def _transcript_text(inbound: InboundMessage) -> str:
     if inbound.text or inbound.reply_id:
         return inbound.text or (inbound.reply_id or "")
     if inbound.media_type:
-        return f"[{inbound.media_type} received - open WhatsApp to view]"
+        # No "open WhatsApp to view" - there is no WhatsApp on our side. Cloud
+        # API is an API, so the console shows the picture itself and this line
+        # is only the fallback for one it could not fetch.
+        return f"[{inbound.media_type}]"
     return ""
 
 
@@ -131,7 +140,7 @@ class ConversationService:
                 user.id, for_update=True
             )
 
-            await messages.add(
+            stored = await messages.add(
                 conversation_id=conversation.id,
                 sender=MessageSender.USER,
                 message=_transcript_text(inbound),
@@ -170,6 +179,13 @@ class ConversationService:
 
             result = await self._machine.handle(ctx)
 
+            # After the machine, because the machine is what decides an image is
+            # a payment proof. Only those are stored: that bounds this to people
+            # who reached the checkout step, rather than letting anyone fill the
+            # database with pictures.
+            if user.payment_proof_at is not None and inbound.media_id:
+                await self._store_media(stored, inbound)
+
             for reply in result.replies:
                 await messages.add(
                     conversation_id=conversation.id,
@@ -185,6 +201,39 @@ class ConversationService:
 
             broadcaster.publish(user.phone)
             return result, user.phone
+
+    # ------------------------------------------------------------------ #
+    async def _store_media(self, record: Message, inbound: InboundMessage) -> None:
+        """Pull the attachment down from Meta and keep it.
+
+        Best effort throughout. A screenshot we cannot fetch must not fail the
+        turn that received it: the customer has just paid us, and the worst
+        possible response to that is an error. They still get their
+        acknowledgement and the console still shows a payment arrived - only the
+        picture is missing, and an agent can ask for it again.
+        """
+        assert inbound.media_id is not None
+        try:
+            fetched = await self._messaging.download_media(inbound.media_id)
+        except Exception:
+            logger.exception("Media download raised", extra={"media": inbound.media_id})
+            return
+        if fetched is None:
+            return
+
+        data, mime = fetched
+        if len(data) > MAX_MEDIA_BYTES:
+            # A payment screenshot is a few hundred KB. Anything far larger is
+            # not one, and is not worth carrying in every row read.
+            logger.warning(
+                "Attachment too large to store",
+                extra={"bytes": len(data), "limit": MAX_MEDIA_BYTES},
+            )
+            return
+
+        record.media_data = data
+        record.media_mime = inbound.media_mime or mime
+        logger.info("Payment screenshot stored", extra={"bytes": len(data)})
 
     # ------------------------------------------------------------------ #
     def _build_dependencies(self, session: object) -> BotDependencies:

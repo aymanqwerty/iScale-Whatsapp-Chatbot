@@ -25,6 +25,7 @@ interface Props {
   current: string | null;
   query: string;
   onSelect: (phone: string) => void;
+  onMenu: (conversation: Conversation, x: number, y: number) => void;
 }
 
 export function ConversationList({
@@ -33,6 +34,7 @@ export function ConversationList({
   current,
   query,
   onSelect,
+  onMenu,
 }: Props) {
   if (loading) return <div className="list"><Skeleton /></div>;
 
@@ -64,11 +66,18 @@ export function ConversationList({
   return (
     <div className="list">
       {rows.map((c) => (
-        <button
+        <div
           key={c.phone}
-          type="button"
-          className={`row${c.phone === current ? " active" : ""}${c.blocked ? " blocked" : ""}`}
+          className={`row${c.phone === current ? " active" : ""}${c.blocked ? " blocked" : ""}${c.pinned ? " pinned" : ""}`}
+          role="button"
+          tabIndex={0}
           onClick={() => onSelect(c.phone)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect(c.phone);
+            }
+          }}
         >
           <div className="av" style={avatarStyle(c.phone)}>
             {initials(c.name, c.phone)}
@@ -92,6 +101,16 @@ export function ConversationList({
               </span>
               <span className="rtime">{timeAgo(c.last_activity)}</span>
             </div>
+            {/* Pinned rows sit out of recency order, so they say why. Without
+                this the top of the list just looks stale. */}
+            {c.pinned && (
+              <span className="pinmark" title="Pinned to the top">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 17v5" /><path d="M9 10.8V4h6v6.8l2 3.2H7l2-3.2Z" />
+                </svg>
+              </span>
+            )}
             {/* Name and number both: staff recognise regulars by name, but the
                 number is what they cross-check against the leads sheet. */}
             <div className="rnum">{prettyPhone(c.phone)}</div>
@@ -99,7 +118,28 @@ export function ConversationList({
               {(c.last_sender === "USER" ? "" : "↩ ") + c.last_message}
             </div>
           </div>
-        </button>
+
+          {/* Revealed on hover, like WhatsApp's own. Kept mounted rather than
+              conditionally rendered so it is reachable by keyboard, and it
+              stops the click so opening the menu does not also open the
+              thread. Coordinates come from the chevron itself - the menu is
+              positioned fixed to escape this list's overflow clipping. */}
+          <button
+            type="button"
+            className="rowchev"
+            aria-label={`Options for ${c.name || c.phone}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+              onMenu(c, box.left - 150, box.bottom + 6);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
       ))}
     </div>
   );

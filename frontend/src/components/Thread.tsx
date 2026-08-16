@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import type { Message } from "../lib/api";
+import { useEffect, useRef, useState } from "react";
+import { api, type Message } from "../lib/api";
 import { clock, dayLabel } from "../lib/format";
 
 function Skeleton() {
@@ -22,6 +22,47 @@ function Skeleton() {
   );
 }
 
+/**
+ * A stored attachment - in practice, a payment screenshot.
+ *
+ * Loaded through `fetch` rather than an `<img src>` because the endpoint is
+ * behind the console session and a browser will not put an Authorization header
+ * on an image request. The object URL is revoked on unmount; without that, every
+ * poll that redraws the thread would leak another copy of the image.
+ */
+function Attachment({ message }: { message: Message }) {
+  const [url, setUrl] = useState("");
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let revoked = false;
+    let objectUrl = "";
+    api
+      .media(message.id)
+      .then((value) => {
+        if (revoked) {
+          URL.revokeObjectURL(value);
+          return;
+        }
+        objectUrl = value;
+        setUrl(value);
+      })
+      .catch(() => setFailed(true));
+    return () => {
+      revoked = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [message.id]);
+
+  if (failed) return <div className="attach failed">Attachment unavailable</div>;
+  if (!url) return <div className="attach sk" />;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="attach">
+      <img src={url} alt="Attachment from the customer" />
+    </a>
+  );
+}
+
 function Bubble({ message }: { message: Message }) {
   const classes = [
     "msg",
@@ -35,6 +76,7 @@ function Bubble({ message }: { message: Message }) {
   return (
     <div className={classes}>
       {message.sender === "AGENT" && <span className="who">You</span>}
+      {message.has_media && <Attachment message={message} />}
       {/* React escapes this by default. A customer can put anything in a
           WhatsApp message, and this is where staff read it. */}
       {message.text}

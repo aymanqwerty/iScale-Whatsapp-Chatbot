@@ -29,6 +29,19 @@ class User(TimestampMixin, Base):
     #: Name from the WhatsApp profile - a useful fallback, but user-editable.
     profile_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    #: A label an agent typed in the console. Deliberately NOT part of
+    #: `display_name`: that is what the bot greets people by and prefills
+    #: bookings with, so an internal note like "tyre kicker - do not chase"
+    #: would end up addressed to the customer. Console display only.
+    alias: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    #: When an agent pinned this contact to the top of the inbox. Null means
+    #: unpinned; the timestamp orders several pinned rows most-recent-first.
+    #: Shared, not per-agent - the console is one login for the whole team.
+    pinned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     #: True while a human has taken this conversation over from the console.
     #: Held on the user rather than the conversation because conversations close
     #: when a lead is created - a handover must survive that, or the bot would

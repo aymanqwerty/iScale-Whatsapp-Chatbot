@@ -259,6 +259,100 @@ def test_the_bot_sees_what_the_agent_said(client: TestClient) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Pin and rename
+# --------------------------------------------------------------------------- #
+def test_pinning_lifts_a_conversation_above_recency(client: TestClient) -> None:
+    """The whole point: it sits at the top even when it is not the newest."""
+    _talk(client, "hi")
+    client.post("/api/v1/simulate", json={"phone": "919000000001", "text": "hi"})
+    _login(client)
+
+    rows = client.get(f"{BASE}/api/conversations").json()["conversations"]
+    assert rows[0]["phone"] != USER_PHONE, "it was already on top - proves nothing"
+
+    client.post(f"{BASE}/api/pin", json={"phone": USER_PHONE, "pinned": True})
+
+    rows = client.get(f"{BASE}/api/conversations").json()["conversations"]
+    assert rows[0]["phone"] == USER_PHONE
+    assert rows[0]["pinned"] is True
+
+
+def test_unpinning_restores_recency_order(client: TestClient) -> None:
+    _talk(client, "hi")
+    client.post("/api/v1/simulate", json={"phone": "919000000001", "text": "hi"})
+    _login(client)
+    client.post(f"{BASE}/api/pin", json={"phone": USER_PHONE, "pinned": True})
+
+    client.post(f"{BASE}/api/pin", json={"phone": USER_PHONE, "pinned": False})
+
+    rows = client.get(f"{BASE}/api/conversations").json()["conversations"]
+    assert rows[0]["phone"] != USER_PHONE
+    assert all(r["pinned"] is False for r in rows)
+
+
+def test_renaming_changes_only_what_the_console_shows(client: TestClient) -> None:
+    """It must NOT touch `name`.
+
+    `name` is what the customer told us and what `User.display_name` feeds - the
+    bot greets people by it and prefills bookings with it. An agent's label
+    written there would be read back to the customer.
+    """
+    import sqlite3
+
+    _talk(client, "hi")
+    _login(client)
+
+    response = client.post(
+        f"{BASE}/api/rename", json={"phone": USER_PHONE, "name": "Priya - hot lead"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Priya - hot lead"
+
+    thread = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()
+    assert thread["name"] == "Priya - hot lead"
+    assert thread["alias"] == "Priya - hot lead"
+
+    # Read the row directly. Going through the API would only prove the API is
+    # self-consistent; the claim under test is about which COLUMN was written.
+    url = str(client.app.state.settings.database_url)
+    path = url.split("///", 1)[1]
+    with sqlite3.connect(path) as conn:
+        alias, name = conn.execute(
+            "SELECT alias, name FROM users WHERE phone = ?", (USER_PHONE,)
+        ).fetchone()
+
+    assert alias == "Priya - hot lead"
+    assert name != "Priya - hot lead", "the customer's own name was overwritten"
+
+
+def test_clearing_the_rename_falls_back(client: TestClient) -> None:
+    _talk(client, "hi")
+    _login(client)
+    client.post(f"{BASE}/api/rename", json={"phone": USER_PHONE, "name": "Temp label"})
+
+    client.post(f"{BASE}/api/rename", json={"phone": USER_PHONE, "name": "   "})
+
+    thread = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()
+    assert thread["alias"] == ""
+
+
+def test_pin_and_rename_need_a_session(client: TestClient) -> None:
+    assert (
+        client.post(
+            f"{BASE}/api/pin", json={"phone": USER_PHONE, "pinned": True}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            f"{BASE}/api/rename", json={"phone": USER_PHONE, "name": "x"}
+        ).status_code
+        == 401
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Blocking
 # --------------------------------------------------------------------------- #
 def _block(client: TestClient, blocked: bool = True) -> None:

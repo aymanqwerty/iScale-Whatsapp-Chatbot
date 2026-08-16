@@ -71,6 +71,8 @@ def _parse_message(
     text = ""
     reply_id: str | None = None
     media_type: str | None = None
+    media_id: str | None = None
+    media_mime: str | None = None
 
     match raw.type:
         case "text":
@@ -101,6 +103,15 @@ def _parse_message(
             # is proof of payment, and a voice note is not. Without this both
             # arrive as an indistinguishable UNSUPPORTED.
             media_type = raw.type
+            # The id is the only handle Cloud API gives us for the bytes - there
+            # is no URL in the webhook and no WhatsApp app to open it in, so
+            # without this the picture is unreachable forever.
+            attachment = raw.image or raw.document
+            if attachment is not None:
+                media_id = attachment.id
+                media_mime = attachment.mime_type
+                if attachment.caption:
+                    text = attachment.caption.strip()
             logger.info(
                 "Ignoring unsupported message type",
                 extra={"type": raw.type, "wa_message_id": raw.id},
@@ -119,4 +130,6 @@ def _parse_message(
         profile_name=profile_names.get(raw.from_),
         timestamp=timestamp,
         media_type=media_type,
+        media_id=media_id,
+        media_mime=media_mime,
     )

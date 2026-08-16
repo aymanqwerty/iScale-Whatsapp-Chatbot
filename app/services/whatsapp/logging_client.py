@@ -18,6 +18,10 @@ class LoggingMessagingClient:
     def __init__(self) -> None:
         #: Everything "sent", newest last - handy in tests and local debugging.
         self.sent: list[tuple[str, OutboundMessage]] = []
+        #: Canned attachment bytes, keyed by media id. Nothing sets this in
+        #: normal use; tests populate it to exercise the download path without a
+        #: Cloud API behind them.
+        self.media: dict[str, tuple[bytes, str]] = {}
 
     async def send(self, to: str, message: OutboundMessage) -> str | None:
         self.sent.append((to, message))
@@ -32,6 +36,10 @@ class LoggingMessagingClient:
 
     async def mark_read(self, wa_message_id: str, *, typing: bool = False) -> None:
         return None
+
+    async def download_media(self, media_id: str) -> tuple[bytes, str] | None:
+        """Whatever was stubbed in; nothing at all by default."""
+        return self.media.get(media_id)
 
     async def close(self) -> None:
         return None
