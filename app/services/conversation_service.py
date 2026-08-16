@@ -34,6 +34,21 @@ from app.services.whatsapp.base import MessagingClient
 logger = get_logger(__name__)
 
 
+def _transcript_text(inbound: InboundMessage) -> str:
+    """What the console should show for this message.
+
+    Media has no text, and storing the empty string left a blank row in the
+    transcript - so an agent asked to verify a payment saw nothing at all where
+    the screenshot should be. A placeholder is not the image, but it does say
+    that something arrived and what kind of thing it was.
+    """
+    if inbound.text or inbound.reply_id:
+        return inbound.text or (inbound.reply_id or "")
+    if inbound.media_type:
+        return f"[{inbound.media_type} received - open WhatsApp to view]"
+    return ""
+
+
 class ConversationService:
     def __init__(
         self,
@@ -119,7 +134,7 @@ class ConversationService:
             await messages.add(
                 conversation_id=conversation.id,
                 sender=MessageSender.USER,
-                message=inbound.text or (inbound.reply_id or ""),
+                message=_transcript_text(inbound),
                 wa_message_id=inbound.wa_message_id,
                 state=conversation.current_state,
                 # WhatsApp's own send time, so a redelivered message is

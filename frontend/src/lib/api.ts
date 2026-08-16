@@ -26,6 +26,7 @@ export interface Conversation {
   last_sender: Sender | "";
   bot_paused: boolean;
   blocked: boolean;
+  payment_pending: boolean;
 }
 
 export interface Message {
@@ -44,6 +45,8 @@ export interface Thread {
   bot_paused: boolean;
   blocked: boolean;
   blocked_at: string;
+  payment_pending: boolean;
+  payment_proof_at: string;
   can_reply: boolean;
   window_expires: string;
   messages: Message[];
@@ -127,6 +130,12 @@ export const api = {
     request<{ phone: string; blocked: boolean; bot_paused: boolean }>(
       "/api/block",
       { method: "POST", body: JSON.stringify({ phone, blocked }) },
+    ),
+
+  clearPayment: (phone: string) =>
+    request<{ phone: string; payment_pending: boolean }>(
+      "/api/payment-verified",
+      { method: "POST", body: JSON.stringify({ phone }) },
     ),
 
   send: (phone: string, text: string) =>

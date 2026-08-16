@@ -86,6 +86,9 @@ export function ConversationList({
                 ) : (
                   c.bot_paused && <span className="badge">YOU</span>
                 )}
+                {/* Money waiting to be checked outranks both of the above, so
+                    it is shown as well as them, not instead of them. */}
+                {c.payment_pending && <span className="badge pay">PAYMENT</span>}
               </span>
               <span className="rtime">{timeAgo(c.last_activity)}</span>
             </div>

@@ -41,6 +41,16 @@ class InboundMessage:
     reply_id: str | None = None
     profile_name: str | None = None
     timestamp: datetime | None = None
+    #: WhatsApp's own type string for payloads we cannot read as text
+    #: ("image", "audio", "document"...). Carried so a payment screenshot can be
+    #: told apart from a voice note - both are UNSUPPORTED, but only one of them
+    #: is somebody trying to pay us.
+    media_type: str | None = None
+
+    @property
+    def is_image(self) -> bool:
+        """Whether this is a picture - the shape a payment proof arrives in."""
+        return self.media_type in ("image", "document", "sticker")
 
     @property
     def is_actionable(self) -> bool:

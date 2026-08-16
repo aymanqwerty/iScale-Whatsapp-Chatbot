@@ -13,7 +13,7 @@ figures from `offers.json`, and the model never sees either.
 from __future__ import annotations
 
 from app.bot import copy, intents
-from app.bot.context import CTX_OFFER_SENT, TurnContext
+from app.bot.context import CTX_OFFER_SENT, CTX_PAY_LINK_SENT, TurnContext
 from app.core.logging import get_logger
 from app.domain.enums import ConversationState, LeadType
 from app.domain.messaging import OutboundMessage, TurnResult
@@ -126,11 +126,24 @@ def handle_offer_reply(ctx: TurnContext) -> TurnResult | None:
     identically wherever it is tapped from.
     """
     reply_id = ctx.inbound.reply_id
-    if reply_id not in (copy.OFFER_DONE, copy.OFFER_QUESTION):
+    if reply_id not in (copy.OFFER_DONE, copy.OFFER_QUESTION, copy.OFFER_PAY_NOW):
         return None
 
     conversation = ctx.conversation
     result = TurnResult()
+
+    if reply_id == copy.OFFER_PAY_NOW:
+        offer = ctx.deps.knowledge_base.offer
+        course = ctx.deps.knowledge_base.upsell_course
+        # Recorded so that an image arriving later is read as payment proof
+        # rather than getting the "I only read text" reply - which, right after
+        # we asked for a screenshot, would look broken.
+        conversation.set_ctx(CTX_PAY_LINK_SENT, True)
+        logger.info("Direct payment links sent")
+        result.add(
+            copy.payment_links(offer, course.name if course else "the course")
+        )
+        return result
 
     if reply_id == copy.OFFER_DONE:
         # No lead is created and nothing is claimed as paid: we cannot see the

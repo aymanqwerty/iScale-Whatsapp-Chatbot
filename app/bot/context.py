@@ -42,6 +42,9 @@ CTX_PROFILE = "profile"
 #: Set once the discount has been shown. A coupon repeated every few messages
 #: stops reading as a favour and starts reading as pressure.
 CTX_OFFER_SENT = "offer_sent"
+#: Set once the Razorpay links have gone out. An image arriving after this is
+#: treated as payment proof; the same image before it is not.
+CTX_PAY_LINK_SENT = "pay_link_sent"
 
 CTX_EMAIL = "email"
 CTX_ENROLLED_COURSE = "enrolled_course"
