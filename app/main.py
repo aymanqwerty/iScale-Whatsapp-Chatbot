@@ -75,6 +75,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    # Order matters. `add_middleware` prepends, so the LAST call is outermost:
+    # this lands the shield inside CORS, which is the whole point of it.
+    _register_error_shield(app)
     _register_cors(app, settings)
     _register_middleware(app)
     _register_exception_handlers(app)
@@ -134,6 +137,37 @@ def _register_icons(app: FastAPI) -> None:
             # on every page load is pure noise in the access log.
             headers={"Cache-Control": "public, max-age=604800"},
         )
+
+
+def _register_error_shield(app: FastAPI) -> None:
+    """Turn an unhandled exception into a 500 *inside* the CORS layer.
+
+    Starlette handles `Exception` in `ServerErrorMiddleware`, which sits outside
+    everything - so a crashing endpoint produces a 500 with no CORS headers, and
+    the browser reports it as a CORS failure. The real error is invisible: the
+    console showed "blocked by CORS policy" for what was actually a KeyError in
+    a log line, which is a long way to walk in the wrong direction.
+
+    Catching here, inside the CORS middleware, means the 500 carries the usual
+    `Access-Control-Allow-Origin` header and the frontend reads the real status.
+    The handler in `_register_exception_handlers` stays as the backstop for
+    anything raised further out than this.
+    """
+
+    @app.middleware("http")
+    async def error_shield(request: Request, call_next: Any) -> Any:
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.exception("Unhandled exception")
+            # Still nothing internal in the body - only the status is fixed.
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": "internal_error",
+                    "message": "An unexpected error occurred.",
+                },
+            )
 
 
 def _register_cors(app: FastAPI, settings: Settings) -> None:
