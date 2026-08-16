@@ -259,6 +259,80 @@ def test_the_bot_sees_what_the_agent_said(client: TestClient) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Attachments
+# --------------------------------------------------------------------------- #
+def _attach(client: TestClient, data: bytes, mime: str = "image/png") -> int:
+    """Staple an attachment onto the newest message and return its id."""
+    import sqlite3
+
+    path = str(client.app.state.settings.database_url).split("///", 1)[1]
+    with sqlite3.connect(path) as conn:
+        (message_id,) = conn.execute("SELECT max(id) FROM messages").fetchone()
+        conn.execute(
+            "UPDATE messages SET media_data = ?, media_mime = ? WHERE id = ?",
+            (data, mime, message_id),
+        )
+    return int(message_id)
+
+
+def test_an_attachment_is_served_to_the_console(client: TestClient) -> None:
+    """The console is the only place these can be seen.
+
+    Cloud API keeps media behind Meta's access token and expires it, and there
+    is no WhatsApp app on our side - so if this endpoint fails, a payment
+    screenshot is simply unviewable.
+    """
+    import logging
+
+    _talk(client, "hi")
+    _login(client)
+    message_id = _attach(client, b"\x89PNG\r\n\x1a\n-fake", "image/png")
+
+    # Production logs at INFO; the suite runs at WARNING, where `logger.info`
+    # returns before it ever builds a LogRecord. That gap hid a crash in the
+    # log call itself - a reserved `extra` key raising KeyError - which 500'd
+    # every request in production while every test here passed.
+    logging.getLogger("app.api.v1.console").setLevel(logging.INFO)
+    try:
+        response = client.get(f"{BASE}/api/media/{message_id}")
+    finally:
+        logging.getLogger("app.api.v1.console").setLevel(logging.NOTSET)
+
+    assert response.status_code == 200, response.text
+    assert response.content == b"\x89PNG\r\n\x1a\n-fake"
+    assert response.headers["content-type"] == "image/png"
+
+
+def test_the_thread_flags_which_messages_have_one(client: TestClient) -> None:
+    _talk(client, "hi")
+    _login(client)
+    message_id = _attach(client, b"bytes")
+
+    thread = client.get(f"{BASE}/api/messages/{USER_PHONE}").json()
+    flagged = [m for m in thread["messages"] if m["has_media"]]
+
+    assert [m["id"] for m in flagged] == [message_id]
+
+
+def test_a_message_without_an_attachment_is_a_404(client: TestClient) -> None:
+    _talk(client, "hi")
+    _login(client)
+
+    assert client.get(f"{BASE}/api/media/999999").status_code == 404
+
+
+def test_attachments_need_a_session(client: TestClient) -> None:
+    """These are customer payment screenshots - about as sensitive as it gets."""
+    _talk(client, "hi")
+    _login(client)
+    message_id = _attach(client, b"bytes")
+    client.post(f"{BASE}/api/logout")
+    client.cookies.clear()
+
+    assert client.get(f"{BASE}/api/media/{message_id}").status_code == 401
+
+
+# --------------------------------------------------------------------------- #
 # Pin and rename
 # --------------------------------------------------------------------------- #
 def test_pinning_lifts_a_conversation_above_recency(client: TestClient) -> None:
@@ -848,3 +922,28 @@ def test_localhost_is_not_allowed_in_production(tmp_path: Path) -> None:
     )
 
     assert settings.console_origins == ["https://console.vercel.app"]
+
+
+def test_a_crash_still_carries_cors_headers(cors_client: TestClient) -> None:
+    """Otherwise a 500 reads as a CORS failure and hides the real error.
+
+    Starlette handles `Exception` outside the CORS layer, so an unshielded
+    crash reaches the browser with no Access-Control-Allow-Origin and is
+    reported as "blocked by CORS policy" - which is a long walk in the wrong
+    direction from, say, a KeyError in a log line.
+    """
+    app = cors_client.app
+
+    @app.get("/api/v1/console/api/__boom", include_in_schema=False)
+    async def boom() -> None:
+        raise RuntimeError("kaboom")
+
+    response = cors_client.get(
+        "/api/v1/console/api/__boom",
+        headers={"Origin": "https://console.example.com"},
+    )
+
+    assert response.status_code == 500
+    assert response.headers.get("access-control-allow-origin") == (
+        "https://console.example.com"
+    )

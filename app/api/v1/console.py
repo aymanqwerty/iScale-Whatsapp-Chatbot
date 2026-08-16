@@ -400,7 +400,11 @@ async def get_media(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No attachment")
 
     data, mime = row
-    logger.info("Attachment served", extra={"agent": agent, "message": message_id})
+    # NOT `"message"`. That is a reserved LogRecord field, and passing it in
+    # `extra` raises KeyError rather than being ignored - which 500'd this
+    # endpoint in production while every test passed, because the suite logs at
+    # WARNING and `logger.info` returns before it builds a record at all.
+    logger.info("Attachment served", extra={"agent": agent, "message_id": message_id})
     return Response(
         content=data,
         media_type=mime or "application/octet-stream",
