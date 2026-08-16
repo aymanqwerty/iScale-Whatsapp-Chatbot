@@ -99,6 +99,9 @@
          border-radius:99px;background:rgba(240,178,50,.15);color:var(--amber);
          font-size:9.5px;font-weight:700;letter-spacing:.05em;vertical-align:middle;}
   .badge.stop{background:rgba(248,113,113,.16);color:var(--err);}
+  /* Green, not amber: money arriving is good news and must not read as another
+     warning next to BLOCKED. */
+  .badge.pay{background:rgba(16,185,129,.16);color:var(--accent);}
   /* Dimmed, not hidden. A blocked contact still has to be findable to be
      unblocked, but it should not draw the eye like live work does. */
   .row.blocked .av,.row.blocked .rprev,.row.blocked .rnum{opacity:.45;}
@@ -166,6 +169,15 @@
           box-shadow:inset 0 0 0 1px var(--line2);}
 
   footer{background:var(--panel);border-top:1px solid var(--line);padding:11px 20px 14px;}
+  /* Sits between header and transcript so it cannot be scrolled past. */
+  .paybar{display:flex;align-items:center;gap:12px;padding:11px 20px;
+    background:rgba(16,185,129,.10);border-bottom:1px solid rgba(16,185,129,.22);
+    font-size:13px;color:var(--text);}
+  .paybar span{flex:1;min-width:0;}
+  .paybar button{flex-shrink:0;border:0;border-radius:9px;padding:7px 13px;
+    background:linear-gradient(180deg,#14c98d,#0d9c6d);color:#04231a;
+    font-size:12.5px;font-weight:650;cursor:pointer;}
+  .paybar button:hover{filter:brightness(1.08);}
   .note{font-size:12px;color:var(--muted);margin-bottom:9px;}
   .note.warn{color:var(--amber);}
   .composer{display:flex;gap:10px;align-items:flex-end;}
@@ -289,6 +301,7 @@ const EMPTY = document.querySelector('#thread .empty').cloneNode(true);
 const $ = (id) => document.getElementById(id);
 
 let current = null, paused = false, blocked = false, canReply = false;
+let payment = false;
 let convos = [], listLoaded = false;
 let fetching = false, socket = null, retry = 1000, tempSeq = -1;
 
@@ -443,6 +456,13 @@ function renderList() {
       badge.className = 'badge'; badge.textContent = 'YOU';
       name.appendChild(badge);
     }
+    // Shown as well as the above, not instead of it: money waiting to be
+    // checked outranks both.
+    if (c.payment_pending) {
+      const badge = document.createElement('span');
+      badge.className = 'badge pay'; badge.textContent = 'PAYMENT';
+      name.appendChild(badge);
+    }
     const when = document.createElement('span'); when.className = 'rtime';
     when.textContent = timeAgo(c.last_activity);
     top.append(name, when);
@@ -528,7 +548,10 @@ async function open(phone) {
   paintAvatar($('hAv'), c && c.name, phone);
   $('hWho').textContent = (c && c.name) || 'Unknown';
   $('hSub').textContent = prettyPhone(phone);
-  if (c) { paused = !!c.bot_paused; blocked = !!c.blocked; paintControls(); }
+  if (c) {
+    paused = !!c.bot_paused; blocked = !!c.blocked; payment = !!c.payment_pending;
+    paintControls();
+  }
 
   const st = state(phone);
   if (st.msgs.length) paintThread(phone);               // instant, from cache
@@ -556,6 +579,7 @@ async function refresh(full) {
     // stale, only incomplete.
     if (!handoverPending && handoverSeq === seq) paused = d.bot_paused;
     if (!blockPending && blockSeq === bseq) blocked = d.blocked;
+    payment = !!d.payment_pending;
     canReply = d.can_reply;
     $('hWho').textContent = d.name || 'Unknown';
     $('hSub').textContent = prettyPhone(d.phone);
@@ -586,6 +610,8 @@ function paintControls() {
   b.title = blocked
     ? 'Let this contact reach us again'
     : 'Stop interacting with this contact entirely';
+
+  $('paybar').hidden = !payment;
 
   const usable = paused && canReply && !blocked;
   $('send').disabled = !usable;
@@ -707,6 +733,27 @@ $('blockBtn').addEventListener('click', async () => {
     blockPending = false;
     blockBusy = false;
     paintControls();
+  }
+});
+
+// One-way, so no optimistic-toggle machinery: there is no opposite state for a
+// poll to fight over.
+$('payok').addEventListener('click', async () => {
+  if (!current) return;
+  const phone = current, row = convos.find((c) => c.phone === phone);
+  payment = false; paintControls();
+  if (row) { row.payment_pending = false; renderList(); }
+  try {
+    const r = await api('/payment-verified', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone }),
+    });
+    if (!r.ok) throw new Error();
+  } catch (err) {
+    payment = true; paintControls();
+    if (row) { row.payment_pending = true; renderList(); }
+    toast('Could not clear the payment flag. Try again.');
   }
 });
 

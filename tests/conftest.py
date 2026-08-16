@@ -181,6 +181,19 @@ class Harness:
         await self.service.process_inbound(inbound)
         return [message for _, message in self.messaging.sent[before:]]
 
+    async def send_media(self, media_type: str = "image") -> list[OutboundMessage]:
+        """Send a payload we cannot read as text - a screenshot, say."""
+        before = len(self.messaging.sent)
+        inbound = InboundMessage(
+            wa_message_id=f"wamid.{uuid.uuid4().hex}",
+            from_phone=self.phone,
+            kind=MessageKind.UNSUPPORTED,
+            media_type=media_type,
+            timestamp=datetime.now(),
+        )
+        await self.service.process_inbound(inbound)
+        return [message for _, message in self.messaging.sent[before:]]
+
     async def give_name(self, name: str) -> list[OutboundMessage]:
         """Answer the name question, then confirm the WhatsApp number.
 

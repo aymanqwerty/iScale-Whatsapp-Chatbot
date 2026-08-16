@@ -70,6 +70,7 @@ def _parse_message(
     kind = MessageKind.UNSUPPORTED
     text = ""
     reply_id: str | None = None
+    media_type: str | None = None
 
     match raw.type:
         case "text":
@@ -96,6 +97,10 @@ def _parse_message(
                 text = (raw.button.text or "").strip()
 
         case _:
+            # Not read, but the type is kept: an image sent after a payment link
+            # is proof of payment, and a voice note is not. Without this both
+            # arrive as an indistinguishable UNSUPPORTED.
+            media_type = raw.type
             logger.info(
                 "Ignoring unsupported message type",
                 extra={"type": raw.type, "wa_message_id": raw.id},
@@ -113,4 +118,5 @@ def _parse_message(
         reply_id=reply_id,
         profile_name=profile_names.get(raw.from_),
         timestamp=timestamp,
+        media_type=media_type,
     )

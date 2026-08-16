@@ -250,6 +250,7 @@ async def list_conversations(
                 User.profile_name,
                 User.bot_paused,
                 User.blocked,
+                User.payment_proof_at,
                 Message.message,
                 Message.sender,
                 Message.timestamp,
@@ -271,6 +272,7 @@ async def list_conversations(
                 "last_sender": str(sender),
                 "bot_paused": bool(paused),
                 "blocked": bool(blocked),
+                "payment_pending": paid_at is not None,
             }
             for (
                 phone,
@@ -278,6 +280,7 @@ async def list_conversations(
                 profile_name,
                 paused,
                 blocked,
+                paid_at,
                 text,
                 sender,
                 timestamp,
@@ -329,6 +332,8 @@ async def get_messages(
         "bot_paused": bool(user.bot_paused),
         "blocked": bool(user.blocked),
         "blocked_at": _iso(user.blocked_at),
+        "payment_pending": user.payment_proof_at is not None,
+        "payment_proof_at": _iso(user.payment_proof_at),
         "can_reply": _within_service_window(last_inbound),
         "window_expires": _iso(_window_end(last_inbound)),
         "messages": [
@@ -378,6 +383,12 @@ async def set_handover(
 # --------------------------------------------------------------------------- #
 # Blocking
 # --------------------------------------------------------------------------- #
+class PhoneRequest(BaseModel):
+    """A request that names a contact and carries no other state."""
+
+    phone: str
+
+
 class BlockRequest(BaseModel):
     phone: str
     blocked: bool
@@ -416,6 +427,31 @@ async def set_blocked(
         "blocked": user.blocked,
         "bot_paused": user.bot_paused,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Payments
+# --------------------------------------------------------------------------- #
+@router.post("/api/payment-verified", summary="Clear a pending payment flag")
+async def clear_payment_flag(
+    payload: PhoneRequest, agent: AgentDep, session: SessionDep
+) -> dict[str, Any]:
+    """Mark a payment screenshot as dealt with.
+
+    The flag exists so a screenshot cannot be missed, which only works if it
+    also goes away - a badge that stays on forever is a badge nobody reads. It
+    records nothing about whether the payment was genuine: verification happens
+    in Razorpay, by a person, and this button only says they went and looked.
+    """
+    user = await _get_user(session, payload.phone)
+    user.payment_proof_at = None
+    await session.commit()
+
+    logger.info(
+        "Payment flag cleared", extra={"agent": agent, "phone": _mask(user.phone)}
+    )
+    broadcaster.publish(user.phone)
+    return {"phone": user.phone, "payment_pending": False}
 
 
 # --------------------------------------------------------------------------- #

@@ -54,6 +54,9 @@ PHONE_OTHER = "phone:other"
 #: so the escalation path is identical wherever it is tapped from.
 OFFER_DONE = "offer:done"
 OFFER_QUESTION = "offer:question"
+#: "Send me the payment link" - the direct-payment route that undercuts the
+#: coupon. Takes the primary button slot whenever direct payment is enabled.
+OFFER_PAY_NOW = "offer:pay"
 
 #: (id, title, description, keywords the user might type instead of tapping)
 #:
@@ -320,6 +323,9 @@ def offer_message(offer: dict[str, object], course_name: str) -> OutboundMessage
         headline = f"🎁 *{percent}% off {course_name}*"
         pricing = f"~₹{was:,}~  →  *₹{now:,}*  (you save ₹{saving:,})"
 
+    direct = offer.get("direct_payment")
+    direct_on = isinstance(direct, dict) and bool(direct.get("enabled"))
+
     text = (
         f"Since we've been chatting, I can give you something that isn't on the "
         f"website 👇\n\n"
@@ -329,16 +335,81 @@ def offer_message(offer: dict[str, object], course_name: str) -> OutboundMessage
         f"{url}\n\n"
         f"⏳ This code is only for people who reach us here on WhatsApp, and "
         f"it won't stay open long.\n\n"
-        f"Want to go ahead, or shall I have a counselor talk you through it "
-        f"first?"
     )
+
+    if direct_on:
+        # The better-than-coupon route, stated as a comparison rather than a
+        # second option in a list - "there is something better than the thing I
+        # just gave you" is the part that makes someone tap rather than leave to
+        # think about it. No figure: Razorpay owns the amount, and a number
+        # written here would eventually contradict the checkout page.
+        # The coupon code is deliberately not repeated here. Once per message is
+        # enough to be actionable, and a second mention makes the offer read as
+        # two competing deals rather than one with a better version of itself.
+        text += (
+            "✨ *Or skip the code entirely* - book straight through this chat "
+            "and I'll give you our *lowest price*, better than that code gets "
+            "you. It's the best we do anywhere.\n\n"
+            "Shall I send you the payment link?"
+        )
+        primary = Button(id=OFFER_PAY_NOW, title="Yes, best price")
+    else:
+        text += "Want to go ahead, or shall I have a counselor talk you through it first?"
+        primary = Button(id=OFFER_DONE, title="I'll enroll now")
+
+    # Three is WhatsApp's hard limit, so the direct-payment route takes the
+    # primary slot when it is on. Counselor stays regardless: plenty of people
+    # will not put a card into a link a chatbot sent them, and losing those is
+    # worse than the margin saved.
     return OutboundMessage(
         text=text,
         buttons=(
-            Button(id=OFFER_DONE, title="I'll enroll now"),
+            primary,
             Button(id=MENU_COUNSELOR, title="Talk to a Counselor"),
             Button(id=OFFER_QUESTION, title="I have a question"),
         ),
+    )
+
+
+def payment_links(offer: dict[str, object], course_name: str) -> OutboundMessage:
+    """Both Razorpay links, plus what to do after paying.
+
+    Both are shown together and clearly labelled rather than picked for the
+    customer. Guessing from the country code would be right most of the time,
+    and the times it is wrong are a failed payment at the exact moment someone
+    decided to buy - which is the single most expensive place in this funnel to
+    be clever.
+
+    The screenshot request is the whole reason this reads as a complete
+    transaction: nothing here can see a Razorpay payment, so the customer has to
+    hand us the proof, and being told that up front is what stops them paying
+    and then wondering if anything happened.
+    """
+    direct = offer.get("direct_payment")
+    direct = direct if isinstance(direct, dict) else {}
+    india = str(direct.get("india_url", ""))
+    world = str(direct.get("international_url", ""))
+    code = str(offer.get("coupon_code", ""))
+    site = str(offer.get("payment_url", ""))
+
+    if not india and not world:
+        # Configuration slipped. Falling back to the coupon keeps the sale alive;
+        # sending a message with an empty link in it would not.
+        return OutboundMessage(text=OFFER_ACCEPTED.format(code=code, url=site))
+
+    return OutboundMessage(
+        text=(
+            f"Perfect! 🙌 Here's your link for *{course_name}* - this price is "
+            f"lower than {code} and it's the best we offer anywhere.\n\n"
+            f"🇮🇳 *Paying from India:*\n{india}\n\n"
+            f"🌍 *Paying from outside India:*\n{world}\n\n"
+            f"Just pick the one that matches where you are.\n\n"
+            f"📸 *One last thing* - once you've paid, send me a *screenshot of "
+            f"the payment right here* and our team will confirm your seat, "
+            f"usually within a few hours.\n\n"
+            f"Any trouble at all, say \"counselor\" and someone will call you."
+        ),
+        buttons=(Button(id=MENU_COUNSELOR, title="I need help"),),
     )
 
 
@@ -433,6 +504,32 @@ OFFER_ACCEPTED = (
     "Just apply *{code}* at checkout here:\n{url}\n\n"
     "If the code gives you any trouble, or you'd rather someone walked you "
     "through it, say \"counselor\" and I'll arrange a call."
+)
+
+#: Sent when someone posts an image after being asked for payment proof.
+#:
+#: Carefully does NOT confirm the payment. Nothing here can read a Razorpay
+#: transaction, and an image could be anything - a wrong screenshot, a failed
+#: attempt, a photo of a cat. "Received, a human will check it" is true;
+#: "your seat is confirmed" would be a promise made by something that cannot
+#: see the money.
+PAYMENT_PROOF_ACK = (
+    "Got it, thank you! 🎉\n\n"
+    "I've passed your payment screenshot to our team - they'll verify it and "
+    "confirm your seat, usually within a few hours. You'll hear from us right "
+    "here.\n\n"
+    "Anything you'd like to know in the meantime, just ask 😊"
+)
+
+#: Someone sent media without ever being sent a payment link. Not treated as
+#: proof - it is far more likely a screenshot of a question - but it must not
+#: get the flat "I only read text" brush-off either, in case it IS a payment
+#: they arranged another way.
+MEDIA_WITHOUT_PAYMENT = (
+    "Thanks for sending that! I can't open images myself, so could you tell me "
+    "in a message what it's about?\n\n"
+    "If it's a payment you've already made, say \"payment\" and I'll get "
+    "someone from our team to check it for you."
 )
 
 OFFER_QUESTION_PROMPT = (

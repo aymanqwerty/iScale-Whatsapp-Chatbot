@@ -14,7 +14,14 @@
     "its headline must not be shown as a fixed final price - the customer would",
     "reach checkout expecting a number we never actually promised.",
     "",
-    "Set \"enabled\": false to switch the offer off everywhere immediately."
+    "Set \"enabled\": false to switch the offer off everywhere immediately.",
+    "",
+    "direct_payment is the better-than-BOTDEAL route: the customer pays on",
+    "Razorpay from this chat and gets our lowest price. NO AMOUNT IS QUOTED",
+    "here, deliberately. Razorpay owns that number, and a price written in two",
+    "places drifts the first time one of them changes - leaving the bot",
+    "promising a figure the checkout page contradicts. The bot says 'our lowest",
+    "price' and lets the payment page state it."
   ],
   "offer": {
     "enabled": true,
@@ -27,6 +34,11 @@
     "final_price_inr": 3749,
     "payment_url": "https://www.theiscale.com/cohort/cohort-details/ai-for-everyone-complete-guide",
     "scarcity_note": "limited-time offer for people who reach us on WhatsApp",
-    "exclusivity_note": "not listed on the website - it only works from this chat"
+    "exclusivity_note": "not listed on the website - it only works from this chat",
+    "direct_payment": {
+      "enabled": true,
+      "india_url": "https://rzp.io/rzp/theiscaleAIforEVERYONE",
+      "international_url": "https://rzp.io/rzp/aiforeveryonetheiscale"
+    }
   }
 }

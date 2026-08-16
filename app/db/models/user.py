@@ -55,6 +55,14 @@ class User(TimestampMixin, Base):
     #: it is an audit breadcrumb rather than proof of who clicked.
     blocked_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
+    #: When this contact last sent a payment screenshot. The console badges it
+    #: so the team knows there is money to verify; an agent clears it once they
+    #: have. Held on the user, not the conversation, because a payment must stay
+    #: visible even if the conversation closes underneath it.
+    payment_proof_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     conversations: Mapped[list[Conversation]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",

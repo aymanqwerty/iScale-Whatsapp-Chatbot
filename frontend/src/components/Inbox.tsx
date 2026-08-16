@@ -40,6 +40,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
   const [threadLoading, setThreadLoading] = useState(false);
   const [header, setHeader] = useState({ name: "", phone: "" });
   const [canReply, setCanReply] = useState(false);
+  const [payment, setPayment] = useState(false);
   const [toast, setToast] = useState("");
 
   const cache = useRef(new Map<string, Cached>());
@@ -142,6 +143,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
           epoch: blockEpoch,
         });
         setCanReply(data.can_reply);
+        setPayment(data.payment_pending);
         setHeader({ name: data.name, phone: data.phone });
         if (full || added) setMessages([...entry.messages]);
         setThreadLoading(false);
@@ -163,6 +165,7 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
       setHeader({ name: row?.name ?? "", phone });
       dispatch({ type: "reset", paused: row?.bot_paused ?? false });
       dispatchBlock({ type: "reset", paused: row?.blocked ?? false });
+      setPayment(row?.payment_pending ?? false);
 
       if (entry.messages.length) {
         setMessages([...entry.messages]); // instant, from cache
@@ -252,6 +255,28 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
       notify(
         want ? "Could not block. Try again." : "Could not unblock. Try again.",
       );
+      guard(err);
+    }
+  }
+
+  /* ---------------- payment verification ---------------- */
+  async function clearPayment() {
+    if (!current) return;
+    const phone = current;
+    // No optimistic toggle and no reducer here: this is a one-way action with
+    // no opposite, so there is no state for a poll to fight over.
+    setPayment(false);
+    setConversations((rows) =>
+      rows.map((c) => (c.phone === phone ? { ...c, payment_pending: false } : c)),
+    );
+    try {
+      await api.clearPayment(phone);
+    } catch (err) {
+      setPayment(true);
+      setConversations((rows) =>
+        rows.map((c) => (c.phone === phone ? { ...c, payment_pending: true } : c)),
+      );
+      notify("Could not clear the payment flag. Try again.");
       guard(err);
     }
   }
@@ -496,6 +521,20 @@ export function Inbox({ onSignedOut }: { onSignedOut: () => void }) {
                 </svg>
               </button>
             </header>
+
+            {/* Above the transcript, not in it: an agent opening this thread
+                needs to know there is money waiting before they read a word. */}
+            {payment && (
+              <div className="paybar">
+                <span>
+                  📸 <b>Payment screenshot received.</b> Check it in WhatsApp,
+                  then confirm their seat.
+                </span>
+                <button type="button" onClick={clearPayment}>
+                  Mark verified
+                </button>
+              </div>
+            )}
 
             <Thread messages={messages} loading={threadLoading} />
 

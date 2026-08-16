@@ -9,8 +9,15 @@ decided it had gathered enough.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from app.bot import copy, intents
-from app.bot.context import CTX_NUDGED, CTX_QNA_COUNT, TurnContext
+from app.bot.context import (
+    CTX_NUDGED,
+    CTX_PAY_LINK_SENT,
+    CTX_QNA_COUNT,
+    TurnContext,
+)
 from app.bot.handlers import HANDLERS
 from app.bot.handlers.callback import describe_slot, start_reschedule
 from app.bot.handlers.common import start_callback_capture
@@ -36,9 +43,7 @@ class ConversationMachine:
         state = conversation.current_state
 
         if ctx.inbound.kind is MessageKind.UNSUPPORTED:
-            result = TurnResult()
-            result.add(OutboundMessage(text=copy.UNSUPPORTED_MESSAGE))
-            return result
+            return self._handle_media(ctx)
 
         override = await self._global_command(ctx)
         if override is not None:
@@ -64,6 +69,39 @@ class ConversationMachine:
         return result
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _handle_media(ctx: TurnContext) -> TurnResult:
+        """Reply to something we cannot read as text.
+
+        An image is the shape a payment proof arrives in, and after the Razorpay
+        links have gone out that is overwhelmingly what it is. Answering that
+        with "I can only read text messages" - immediately after asking for a
+        screenshot - would look broken at the one moment the customer has
+        actually paid us.
+
+        Nothing is confirmed. We cannot see a Razorpay transaction, and the
+        image could be a failed attempt or the wrong screenshot entirely, so the
+        promise is only that a human will look at it.
+        """
+        result = TurnResult()
+        inbound = ctx.inbound
+
+        if inbound.is_image and ctx.conversation.get_ctx(CTX_PAY_LINK_SENT, False):
+            # Stamped on the user rather than the conversation: the console
+            # lists by contact, and a payment must stay visible to the team even
+            # if the conversation closes underneath it.
+            ctx.user.payment_proof_at = datetime.now(UTC)
+            logger.info("Payment proof received", extra={"media": inbound.media_type})
+            result.add(OutboundMessage(text=copy.PAYMENT_PROOF_ACK))
+            return result
+
+        if inbound.is_image:
+            result.add(OutboundMessage(text=copy.MEDIA_WITHOUT_PAYMENT))
+            return result
+
+        result.add(OutboundMessage(text=copy.UNSUPPORTED_MESSAGE))
+        return result
+
     async def _global_command(self, ctx: TurnContext) -> TurnResult | None:
         """Commands that work from (almost) any state.
 
