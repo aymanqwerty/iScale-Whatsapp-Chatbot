@@ -27,6 +27,8 @@ export interface Conversation {
   bot_paused: boolean;
   blocked: boolean;
   payment_pending: boolean;
+  pinned: boolean;
+  alias: string;
 }
 
 export interface Message {
@@ -34,6 +36,8 @@ export interface Message {
   sender: Sender;
   text: string;
   at: string;
+  has_media?: boolean;
+  media_mime?: string;
   /** Client-only: drawn immediately, before the server confirms. */
   pending?: boolean;
   failed?: boolean;
@@ -45,6 +49,8 @@ export interface Thread {
   bot_paused: boolean;
   blocked: boolean;
   blocked_at: string;
+  alias: string;
+  pinned: boolean;
   payment_pending: boolean;
   payment_proof_at: string;
   can_reply: boolean;
@@ -132,11 +138,46 @@ export const api = {
       { method: "POST", body: JSON.stringify({ phone, blocked }) },
     ),
 
+  pin: (phone: string, pinned: boolean) =>
+    request<{ phone: string; pinned: boolean }>("/api/pin", {
+      method: "POST",
+      body: JSON.stringify({ phone, pinned }),
+    }),
+
+  rename: (phone: string, name: string) =>
+    request<{ phone: string; alias: string; name: string }>("/api/rename", {
+      method: "POST",
+      body: JSON.stringify({ phone, name }),
+    }),
+
   clearPayment: (phone: string) =>
     request<{ phone: string; payment_pending: boolean }>(
       "/api/payment-verified",
       { method: "POST", body: JSON.stringify({ phone }) },
     ),
+
+  /**
+   * An attachment, as an object URL.
+   *
+   * Fetched rather than pointed at with `<img src>`, because the endpoint needs
+   * the bearer token and a browser will not attach one to an image request.
+   * The caller owns the returned URL and must revokeObjectURL it.
+   */
+  async media(messageId: number): Promise<string> {
+    const stored = token.get();
+    const headers = new Headers();
+    if (stored) headers.set("Authorization", `Bearer ${stored}`);
+    const response = await fetch(`${ROOT}/api/media/${messageId}`, {
+      headers,
+      credentials: "include",
+    });
+    if (response.status === 401) {
+      token.clear();
+      throw new SessionExpired();
+    }
+    if (!response.ok) throw new Error("Could not load the attachment.");
+    return URL.createObjectURL(await response.blob());
+  },
 
   send: (phone: string, text: string) =>
     request<{ id: number; sender: Sender; text: string }>("/api/send", {

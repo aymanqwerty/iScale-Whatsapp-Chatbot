@@ -102,6 +102,49 @@
   /* Green, not amber: money arriving is good news and must not read as another
      warning next to BLOCKED. */
   .badge.pay{background:rgba(16,185,129,.16);color:var(--accent);}
+
+  /* Hidden until hover, like WhatsApp's own; revealed on focus too so it is
+     reachable by keyboard rather than mouse-only. */
+  .row{position:relative;}
+  .rowchev{position:absolute;top:8px;right:6px;width:24px;height:24px;
+    display:grid;place-items:center;border:0;border-radius:7px;padding:0;
+    background:var(--raised);color:var(--muted);cursor:pointer;opacity:0;
+    pointer-events:none;transition:opacity .13s,color .13s,background .13s;}
+  .row:hover .rowchev,.rowchev:focus-visible{opacity:1;pointer-events:auto;}
+  .rowchev:hover{background:var(--line);color:var(--text);}
+  .pinmark{display:inline-flex;color:var(--faint);margin-top:2px;}
+  .row.pinned{background:rgba(255,255,255,.022);}
+
+  /* Fixed, not absolute: #list is an overflow container and would clip a menu
+     opened on the last row. */
+  .rowmenu{position:fixed;z-index:60;min-width:172px;padding:5px;
+    background:var(--raised);border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 18px 44px -14px rgba(0,0,0,.8);}
+  .rowmenu button{display:flex;align-items:center;gap:10px;width:100%;
+    padding:9px 11px;border:0;border-radius:8px;background:transparent;
+    color:var(--text);font-size:13.5px;text-align:left;cursor:pointer;}
+  .rowmenu button:hover{background:var(--panel2);}
+
+  .scrim{position:fixed;inset:0;z-index:70;display:grid;place-items:center;
+    background:rgba(4,6,10,.6);padding:20px;}
+  .dialog{width:min(400px,100%);padding:24px;border-radius:16px;
+    background:linear-gradient(180deg,#161b23 0%,var(--panel) 100%);
+    border:1px solid var(--line);box-shadow:0 30px 80px -20px rgba(0,0,0,.9);}
+  .dialog h2{margin:0 0 6px;font-size:17px;font-weight:650;letter-spacing:-.02em;}
+  .dialog .dsub{margin:0 0 18px;font-size:12.5px;color:var(--muted);line-height:1.5;}
+  .dialog input{width:100%;padding:11px 13px;border-radius:10px;font-size:14.5px;
+    border:1px solid var(--line);background:var(--bg);color:var(--text);}
+  .dialog input:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3.5px var(--accent-soft);}
+  .dialog .actions{display:flex;align-items:center;gap:8px;margin-top:18px;}
+  .dialog .actions .gap{flex:1;}
+  .dialog button{border:0;border-radius:9px;padding:9px 15px;font-size:13px;
+    font-weight:600;cursor:pointer;}
+  .dialog button.ghost{background:transparent;color:var(--muted);
+    box-shadow:inset 0 0 0 1px var(--line);}
+  .dialog button.ghost:hover{background:var(--panel2);color:var(--text);}
+  .dialog button.primary{background:linear-gradient(180deg,#14c98d,#0d9c6d);
+    color:#04231a;font-weight:650;}
   /* Dimmed, not hidden. A blocked contact still has to be findable to be
      unblocked, but it should not draw the eye like live work does. */
   .row.blocked .av,.row.blocked .rprev,.row.blocked .rnum{opacity:.45;}
@@ -178,6 +221,15 @@
     background:linear-gradient(180deg,#14c98d,#0d9c6d);color:#04231a;
     font-size:12.5px;font-weight:650;cursor:pointer;}
   .paybar button:hover{filter:brightness(1.08);}
+  /* Payment screenshots. Capped so a tall phone screenshot cannot take over
+     the pane - clicking opens the full size in a new tab. */
+  .attach{display:block;margin:2px 0 7px;border-radius:10px;overflow:hidden;
+    max-width:260px;line-height:0;}
+  .attach img{display:block;width:100%;height:auto;max-height:340px;
+    object-fit:cover;cursor:zoom-in;}
+  .attach.failed{padding:10px 12px;background:rgba(255,255,255,.05);
+    border-radius:10px;font-size:12px;color:var(--faint);line-height:normal;
+    max-width:220px;}
   .note{font-size:12px;color:var(--muted);margin-bottom:9px;}
   .note.warn{color:var(--amber);}
   .composer{display:flex;gap:10px;align-items:flex-end;}
@@ -290,6 +342,24 @@
     </div>
   </footer>
 </main>
+
+<div class="rowmenu" id="rowmenu" role="menu" hidden></div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h2>Rename contact</h2>
+    <p class="dsub" id="renameSub"></p>
+    <form id="renameForm">
+      <input id="renameInput" maxlength="120" spellcheck="false">
+      <div class="actions">
+        <button type="button" class="ghost" id="renameClear">Clear</button>
+        <div class="gap"></div>
+        <button type="button" class="ghost" id="renameCancel">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -434,8 +504,8 @@ function renderList() {
 
   rows.forEach((c) => {
     const row = document.createElement('button');
-    row.className =
-      'row' + (c.phone === current ? ' active' : '') + (c.blocked ? ' blocked' : '');
+    row.className = 'row' + (c.phone === current ? ' active' : '') +
+      (c.blocked ? ' blocked' : '') + (c.pinned ? ' pinned' : '');
     row.type = 'button';
 
     const av = document.createElement('div'); av.className = 'av';
@@ -467,6 +537,18 @@ function renderList() {
     when.textContent = timeAgo(c.last_activity);
     top.append(name, when);
 
+    // Pinned rows sit out of recency order, so they say why - otherwise the
+    // top of the list just looks stale.
+    if (c.pinned) {
+      const mark = document.createElement('span');
+      mark.className = 'pinmark'; mark.title = 'Pinned to the top';
+      mark.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none"' +
+        ' stroke="currentColor" stroke-width="2.2" stroke-linecap="round"' +
+        ' stroke-linejoin="round"><path d="M12 17v5"/>' +
+        '<path d="M9 10.8V4h6v6.8l2 3.2H7l2-3.2Z"/></svg>';
+      body.appendChild(mark);
+    }
+
     const num = document.createElement('div'); num.className = 'rnum';
     num.textContent = prettyPhone(c.phone);
     const prev = document.createElement('div'); prev.className = 'rprev';
@@ -474,6 +556,21 @@ function renderList() {
 
     body.append(top, num, prev);
     row.append(av, body);
+    // Stops the click so opening the menu does not also open the thread.
+    // Coordinates come from the chevron; the menu is fixed-positioned to
+    // escape #list's overflow clipping.
+    const chev = document.createElement('button');
+    chev.type = 'button'; chev.className = 'rowchev';
+    chev.setAttribute('aria-label', 'Options for ' + (c.name || c.phone));
+    chev.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"' +
+      ' stroke="currentColor" stroke-width="2.4" stroke-linecap="round"' +
+      ' stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+    chev.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openRowMenu(c, chev.getBoundingClientRect());
+    });
+    row.appendChild(chev);
+
     row.addEventListener('click', () => open(c.phone));
     list.appendChild(row);
   });
@@ -499,6 +596,30 @@ function bubble(m) {
     const who = document.createElement('span');
     who.className = 'who'; who.textContent = 'You';
     el.appendChild(who);
+  }
+  // Fetched rather than set as an <img src>: the endpoint sits behind the
+  // console session, and a browser will not send credentials on an image
+  // request from a page hosted elsewhere. The object URL is released once the
+  // picture has decoded, so redrawing the thread cannot leak copies of it.
+  if (m.has_media) {
+    const link = document.createElement('a');
+    link.className = 'attach'; link.target = '_blank'; link.rel = 'noreferrer';
+    el.appendChild(link);
+    api('/media/' + m.id)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error())))
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const img = document.createElement('img');
+        img.alt = 'Attachment from the customer';
+        img.onload = () => URL.revokeObjectURL(url);
+        img.src = url;
+        link.href = url;
+        link.appendChild(img);
+      })
+      .catch(() => {
+        link.className = 'attach failed';
+        link.textContent = 'Attachment unavailable';
+      });
   }
   el.appendChild(document.createTextNode(m.text));
   const meta = document.createElement('span'); meta.className = 'meta';
@@ -756,6 +877,127 @@ $('payok').addEventListener('click', async () => {
     toast('Could not clear the payment flag. Try again.');
   }
 });
+
+/* ---------------- row menu: pin & rename ---------------- */
+let menuFor = null;
+
+function closeRowMenu() {
+  menuFor = null;
+  $('rowmenu').hidden = true;
+}
+
+function openRowMenu(c, box) {
+  menuFor = c;
+  const menu = $('rowmenu');
+  menu.replaceChildren();
+
+  const pin = document.createElement('button');
+  pin.type = 'button'; pin.setAttribute('role', 'menuitem');
+  pin.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"' +
+    ' stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
+    ' stroke-linejoin="round"><path d="M12 17v5"/>' +
+    '<path d="M9 10.8V4h6v6.8l2 3.2H7l2-3.2Z"/></svg>';
+  pin.appendChild(document.createTextNode(c.pinned ? 'Unpin' : 'Pin to top'));
+  pin.addEventListener('click', () => togglePin(c));
+
+  const ren = document.createElement('button');
+  ren.type = 'button'; ren.setAttribute('role', 'menuitem');
+  ren.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"' +
+    ' stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
+    ' stroke-linejoin="round"><path d="M12 20h9"/>' +
+    '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  ren.appendChild(document.createTextNode('Rename'));
+  ren.addEventListener('click', () => { closeRowMenu(); openRename(c); });
+
+  menu.append(pin, ren);
+  menu.hidden = false;
+
+  // Measured after it is visible - the height is not known until then, and the
+  // flip is only needed when it would run off the bottom of the window.
+  const m = 8, mb = menu.getBoundingClientRect();
+  let left = box.left - 150, top = box.bottom + 6;
+  if (left + mb.width > innerWidth - m) left = innerWidth - mb.width - m;
+  if (top + mb.height > innerHeight - m) top = box.top - mb.height - 6;
+  menu.style.left = Math.max(m, left) + 'px';
+  menu.style.top = Math.max(m, top) + 'px';
+}
+
+// Any outside interaction closes it. Scroll matters especially: the menu is
+// fixed while the row beneath it is not, so leaving it open through a scroll
+// would leave it pointing at a different contact.
+document.addEventListener('mousedown', (ev) => {
+  if (!menuFor) return;
+  if (!$('rowmenu').contains(ev.target)) closeRowMenu();
+});
+addEventListener('resize', closeRowMenu);
+$('list').addEventListener('scroll', closeRowMenu);
+
+async function togglePin(c) {
+  const want = !c.pinned;
+  closeRowMenu();
+  c.pinned = want; renderList();
+  try {
+    const r = await api('/pin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: c.phone, pinned: want }),
+    });
+    if (!r.ok) throw new Error();
+    // Re-fetch so the server's pinned-first ordering is applied, rather than
+    // leaving the row where it was with a pin icon on it.
+    loadConversations();
+  } catch (err) {
+    c.pinned = !want; renderList();
+    toast('Could not change the pin. Try again.');
+  }
+}
+
+/* ---------------- rename ---------------- */
+let renameFor = null;
+
+function openRename(c) {
+  renameFor = c;
+  $('renameSub').textContent =
+    'Shown here in the console only - ' + prettyPhone(c.phone) +
+    ' still sees their own name from the bot.';
+  const input = $('renameInput');
+  input.value = c.alias || '';
+  input.placeholder = c.name || 'Name for this contact';
+  $('renameClear').hidden = !c.alias;
+  $('scrim').hidden = false;
+  input.focus(); input.select();
+}
+
+function closeRename() { renameFor = null; $('scrim').hidden = true; }
+
+$('renameCancel').addEventListener('click', closeRename);
+$('scrim').addEventListener('mousedown', (ev) => {
+  if (ev.target === $('scrim')) closeRename();
+});
+$('renameClear').addEventListener('click', () => saveRename(''));
+$('renameForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  saveRename($('renameInput').value.trim());
+});
+
+async function saveRename(name) {
+  const c = renameFor;
+  if (!c) return;
+  closeRename();
+  try {
+    const r = await api('/rename', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: c.phone, name: name }),
+    });
+    if (!r.ok) throw new Error();
+    const saved = await r.json();
+    c.name = saved.name; c.alias = saved.alias;
+    renderList();
+    if (current === c.phone) $('hWho').textContent = saved.name || 'Unknown';
+    toast(name ? 'Contact renamed.' : 'Name reset.');
+  } catch (err) {
+    toast('Could not rename. Try again.');
+  }
+}
 
 async function send() {
   const box = $('text'), text = box.value.trim();

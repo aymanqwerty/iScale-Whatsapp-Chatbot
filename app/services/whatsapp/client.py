@@ -94,6 +94,44 @@ class WhatsAppClient:
         except Exception as exc:
             logger.debug("Could not mark message as read", extra={"error": str(exc)})
 
+    async def download_media(self, media_id: str) -> tuple[bytes, str] | None:
+        """Fetch an attachment in the two steps Cloud API requires.
+
+        The webhook carries only an id. Resolving it gives a short-lived URL on
+        a Meta CDN which still needs the access token as a bearer header - it is
+        not a public link, so it cannot simply be handed to a browser. Hence
+        download-then-store rather than redirect.
+
+        Best effort: a screenshot we cannot fetch must not break the turn that
+        received it. The customer still gets their acknowledgement, and the
+        console still shows that something arrived.
+        """
+        try:
+            self._require_config()
+            lookup = await self._client.get(
+                f"{self._base_url}/{media_id}",
+                headers={"Authorization": f"Bearer {self._token}"},
+            )
+            lookup.raise_for_status()
+            url = lookup.json().get("url")
+            if not url:
+                logger.warning("Media lookup returned no URL", extra={"media": media_id})
+                return None
+
+            # Same bearer token again - the CDN URL is authenticated too.
+            blob = await self._client.get(
+                url, headers={"Authorization": f"Bearer {self._token}"}
+            )
+            blob.raise_for_status()
+            mime = blob.headers.get("content-type", "application/octet-stream")
+            return blob.content, mime.split(";")[0].strip()
+        except Exception as exc:
+            logger.warning(
+                "Could not download media",
+                extra={"media": media_id, "error": str(exc)},
+            )
+            return None
+
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()

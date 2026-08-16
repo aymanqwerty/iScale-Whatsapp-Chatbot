@@ -46,6 +46,12 @@ class InboundMessage:
     #: told apart from a voice note - both are UNSUPPORTED, but only one of them
     #: is somebody trying to pay us.
     media_type: str | None = None
+    #: Cloud API's handle for the attachment's bytes. The webhook carries no URL
+    #: and there is no WhatsApp app on our side to open the picture in, so this
+    #: id is the only route to it - fetched through the Graph API with the
+    #: access token and stored, or the image is lost when Meta expires it.
+    media_id: str | None = None
+    media_mime: str | None = None
 
     @property
     def is_image(self) -> bool:

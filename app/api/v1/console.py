@@ -248,16 +248,21 @@ async def list_conversations(
                 User.phone,
                 User.name,
                 User.profile_name,
+                User.alias,
                 User.bot_paused,
                 User.blocked,
                 User.payment_proof_at,
+                User.pinned_at,
                 Message.message,
                 Message.sender,
                 Message.timestamp,
             )
             .join(newest, newest.c.user_id == User.id)
             .join(Message, Message.id == newest.c.message_id)
-            .order_by(desc(Message.id))
+            # Pinned first, most recently pinned at the top of those; everything
+            # else stays in recency order. Sorted here rather than in the
+            # browser so both consoles agree and a pin survives a reload.
+            .order_by(User.pinned_at.desc().nullslast(), desc(Message.id))
             .limit(min(limit, 500))
         )
     ).all()
@@ -266,21 +271,28 @@ async def list_conversations(
         "conversations": [
             {
                 "phone": phone,
-                "name": name or profile_name or "",
+                # An agent's label wins over both. It is the one a human chose
+                # deliberately, and the reason they chose it is that the other
+                # two were not useful enough to work with.
+                "name": alias or name or profile_name or "",
+                "alias": alias or "",
                 "last_activity": _iso(timestamp),
                 "last_message": (text or "")[:120],
                 "last_sender": str(sender),
                 "bot_paused": bool(paused),
                 "blocked": bool(blocked),
                 "payment_pending": paid_at is not None,
+                "pinned": pinned_at is not None,
             }
             for (
                 phone,
                 name,
                 profile_name,
+                alias,
                 paused,
                 blocked,
                 paid_at,
+                pinned_at,
                 text,
                 sender,
                 timestamp,
@@ -305,15 +317,25 @@ async def get_messages(
     """
     user = await _get_user(session, phone)
 
+    # Columns, not entities: `media_data` is a blob, and selecting the ORM
+    # object would drag every stored screenshot through the connection on every
+    # 2-second poll. `media_mime IS NOT NULL` is the cheap stand-in for "there
+    # is a picture here", fetched by a separate request only when one is shown.
     rows = (
         await session.execute(
-            select(Message)
+            select(
+                Message.id,
+                Message.sender,
+                Message.message,
+                Message.timestamp,
+                Message.media_mime,
+            )
             .join(Conversation, Conversation.id == Message.conversation_id)
             .where(Conversation.user_id == user.id, Message.id > after_id)
             .order_by(Message.id)
             .limit(min(limit, 1000))
         )
-    ).scalars().all()
+    ).all()
 
     last_inbound = (
         await session.execute(
@@ -328,7 +350,9 @@ async def get_messages(
 
     return {
         "phone": user.phone,
-        "name": user.name or user.profile_name or "",
+        "name": user.alias or user.name or user.profile_name or "",
+        "alias": user.alias or "",
+        "pinned": user.pinned_at is not None,
         "bot_paused": bool(user.bot_paused),
         "blocked": bool(user.blocked),
         "blocked_at": _iso(user.blocked_at),
@@ -338,14 +362,57 @@ async def get_messages(
         "window_expires": _iso(_window_end(last_inbound)),
         "messages": [
             {
-                "id": m.id,
-                "sender": str(m.sender),
-                "text": m.message,
-                "at": _iso(m.timestamp),
+                "id": message_id,
+                "sender": str(sender),
+                "text": text,
+                "at": _iso(at),
+                "has_media": mime is not None,
+                "media_mime": mime or "",
             }
-            for m in rows
+            for message_id, sender, text, at, mime in rows
         ],
     }
+
+
+@router.get("/api/media/{message_id}", summary="An attachment's bytes")
+async def get_media(
+    message_id: int, agent: AgentDep, session: SessionDep
+) -> Response:
+    """Serve a stored screenshot to the console.
+
+    This exists because Cloud API media is not a public URL - Meta keeps it
+    behind the access token and expires it, so the browser cannot fetch it and
+    there is no WhatsApp app on our side to open it in. The bytes were pulled
+    down when the message arrived; this hands them to an authenticated agent.
+
+    Behind `AgentDep` like everything else here: these are customer payment
+    screenshots, which is about as sensitive as anything this system holds.
+    """
+    row = (
+        await session.execute(
+            select(Message.media_data, Message.media_mime).where(
+                Message.id == message_id
+            )
+        )
+    ).one_or_none()
+
+    if row is None or row[0] is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No attachment")
+
+    data, mime = row
+    logger.info("Attachment served", extra={"agent": agent, "message": message_id})
+    return Response(
+        content=data,
+        media_type=mime or "application/octet-stream",
+        headers={
+            # Immutable once stored, so the browser may keep it - but privately:
+            # this is a customer's payment screenshot, not something a shared
+            # proxy should hold on to.
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -426,6 +493,62 @@ async def set_blocked(
         "phone": user.phone,
         "blocked": user.blocked,
         "bot_paused": user.bot_paused,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Organising the inbox
+# --------------------------------------------------------------------------- #
+class PinRequest(BaseModel):
+    phone: str
+    pinned: bool
+
+
+class RenameRequest(BaseModel):
+    phone: str
+    #: Empty clears the label and falls back to the customer's own name.
+    name: str = Field(default="", max_length=120)
+
+
+@router.post("/api/pin", summary="Pin a conversation to the top, or unpin it")
+async def set_pinned(
+    payload: PinRequest, agent: AgentDep, session: SessionDep
+) -> dict[str, Any]:
+    user = await _get_user(session, payload.phone)
+    user.pinned_at = datetime.now(UTC) if payload.pinned else None
+    await session.commit()
+
+    logger.info(
+        "Conversation pin changed",
+        extra={"agent": agent, "pinned": payload.pinned, "phone": _mask(user.phone)},
+    )
+    return {"phone": user.phone, "pinned": user.pinned_at is not None}
+
+
+@router.post("/api/rename", summary="Relabel a contact in the console")
+async def rename_contact(
+    payload: RenameRequest, agent: AgentDep, session: SessionDep
+) -> dict[str, Any]:
+    """Set the name the console shows for this number.
+
+    Stored as `alias`, never as `name`. `name` is what the customer told us and
+    what `User.display_name` feeds - the bot greets people by it and prefills
+    bookings with it - so an internal label written there would be read back to
+    the customer. This one is ours; that one is theirs.
+    """
+    user = await _get_user(session, payload.phone)
+    cleaned = payload.name.strip()
+    user.alias = cleaned or None
+    await session.commit()
+
+    logger.info(
+        "Contact relabelled",
+        extra={"agent": agent, "cleared": not cleaned, "phone": _mask(user.phone)},
+    )
+    return {
+        "phone": user.phone,
+        "alias": user.alias or "",
+        "name": user.alias or user.name or user.profile_name or "",
     }
 
 

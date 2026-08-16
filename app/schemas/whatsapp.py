@@ -29,6 +29,18 @@ class TextBody(_Lenient):
     body: str | None = None
 
 
+class MediaBody(_Lenient):
+    """An image, document or other attachment.
+
+    Only the id and mime type are carried: Cloud API keeps the bytes on Meta's
+    servers behind the access token, so the id is the only handle we get.
+    """
+
+    id: str | None = None
+    mime_type: str | None = None
+    caption: str | None = None
+
+
 class Reply(_Lenient):
     """Shared shape of `button_reply` and `list_reply`."""
 
@@ -58,6 +70,8 @@ class WhatsAppMessage(_Lenient):
     text: TextBody | None = None
     interactive: Interactive | None = None
     button: ButtonPayload | None = None
+    image: MediaBody | None = None
+    document: MediaBody | None = None
 
 
 class Status(_Lenient):

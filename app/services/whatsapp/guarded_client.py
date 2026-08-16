@@ -44,6 +44,11 @@ class GuardedMessagingClient:
         # chose to process, and those already passed the inbound filter.
         await self._inner.mark_read(wa_message_id, typing=typing)
 
+    async def download_media(self, media_id: str) -> tuple[bytes, str] | None:
+        # Straight through: the allowlist governs who we may SEND to, and
+        # reading an attachment somebody already sent us is not sending.
+        return await self.inner.download_media(media_id)
+
     async def close(self) -> None:
         await self._inner.close()
 

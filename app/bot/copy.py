@@ -343,13 +343,14 @@ def offer_message(offer: dict[str, object], course_name: str) -> OutboundMessage
         # just gave you" is the part that makes someone tap rather than leave to
         # think about it. No figure: Razorpay owns the amount, and a number
         # written here would eventually contradict the checkout page.
-        # The coupon code is deliberately not repeated here. Once per message is
-        # enough to be actionable, and a second mention makes the offer read as
-        # two competing deals rather than one with a better version of itself.
+        # No second mention of the coupon code. Naming it twice made the two
+        # routes read as competing offers the customer had to compare, when the
+        # only thing they need to understand is "this one is cheaper".
         text += (
-            "✨ *Or skip the code entirely* - book straight through this chat "
-            "and I'll give you our *lowest price*, better than that code gets "
-            "you. It's the best we do anywhere.\n\n"
+            "✨ *Want it even cheaper?*\n"
+            "Pay right here through this chat and I'll give you our biggest "
+            "discount - even lower than the price above. It's the best price "
+            "we offer anywhere.\n\n"
             "Shall I send you the payment link?"
         )
         primary = Button(id=OFFER_PAY_NOW, title="Yes, best price")
