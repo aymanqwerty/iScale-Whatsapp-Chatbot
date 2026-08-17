@@ -412,6 +412,18 @@ class Settings(BaseSettings):
             and self.console_session_secret.get_secret_value()
         )
 
+    #: Authenticate to Google as whatever identity the runtime already has,
+    #: instead of carrying a downloaded private key.
+    #:
+    #: On Cloud Run that is the service account attached to the service, so
+    #: there is no key to paste, mangle or leak - which is exactly how a key
+    #: arrived one base64 character short and failed on its first real write.
+    #: Newer GCP projects also block key downloads outright by org policy
+    #: (`iam.disableServiceAccountKeyCreation`), making this the only route.
+    #:
+    #: Off by default so local development keeps using an explicit key file.
+    google_use_adc: bool = False
+
     def google_credentials_info(self) -> dict[str, Any] | None:
         """Service-account credentials as a dict, from inline JSON or a file.
 

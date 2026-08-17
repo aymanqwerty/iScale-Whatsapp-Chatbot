@@ -27,6 +27,13 @@ htmlcov/
 .vscode/
 .DS_Store
 
+# Cloud Run configuration. Holds live credentials in plain text - the OpenAI
+# key, the WhatsApp token, the database password and the console session
+# secret. GitHub's secret scanning would block the push, and every value in it
+# would need rotating. Copy it between machines by hand.
+env.yaml
+sa.json
+
 # Claude Code's per-machine settings. Never committed: approving a command
 # writes that command into this file verbatim, so any secret passed inline on a
 # command line ends up here. That is exactly what GitHub push protection caught.

@@ -21,6 +21,12 @@
     --sidebar:352px;
   }
   *{box-sizing:border-box;}
+  /* The `hidden` attribute only works through the browser's default
+     stylesheet, so ANY author rule setting `display` silently defeats it -
+     .scrim{display:grid} left the rename dialog permanently on screen, and
+     .paybar{display:flex} did the same to the payment banner. This restores
+     `hidden` to meaning hidden, whatever else a class says. */
+  [hidden]{display:none !important;}
   html,body{height:100%;margin:0;}
   body{
     background:var(--bg); color:var(--text); display:flex; overflow:hidden;
@@ -375,6 +381,13 @@
            stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
   </header>
+
+  <!-- Above the transcript, not in it: an agent opening this thread needs to
+       know there is money waiting before they read a word. -->
+  <div class="paybar" id="paybar" hidden>
+    <span>📸 <b>Payment screenshot received.</b> It is in the thread below - check it, then confirm their seat.</span>
+    <button type="button" id="payok">Mark verified</button>
+  </div>
 
   <div id="thread">
     <div class="empty">
