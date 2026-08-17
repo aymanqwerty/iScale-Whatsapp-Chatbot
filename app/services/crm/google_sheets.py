@@ -47,7 +47,10 @@ class GoogleSheetsLeadSink:
         return bool(
             self._settings.google_sheets_enabled
             and self._spreadsheet_id
-            and self._settings.google_credentials_info()
+            and (
+                self._settings.google_use_adc
+                or self._settings.google_credentials_info()
+            )
         )
 
     # ------------------------------------------------------------------ #
@@ -62,11 +65,27 @@ class GoogleSheetsLeadSink:
                 "run `pip install google-api-python-client google-auth`"
             ) from exc
 
-        info = self._settings.google_credentials_info()
-        if info is None:
-            raise CRMError("No Google service-account credentials configured")
-
-        credentials = Credentials.from_service_account_info(info, scopes=list(_SCOPES))
+        if self._settings.google_use_adc:
+            # The runtime's own identity - on Cloud Run, the attached service
+            # account. Nothing to store and nothing to expire, so the sheet
+            # cannot break because a key was copied badly.
+            try:
+                import google.auth
+            except ImportError as exc:  # pragma: no cover - dependency missing
+                raise CRMError("google-auth is not installed") from exc
+            try:
+                credentials, _ = google.auth.default(scopes=list(_SCOPES))
+            except Exception as exc:
+                raise CRMError(
+                    f"GOOGLE_USE_ADC is on but no default credentials were found: {exc}"
+                ) from exc
+        else:
+            info = self._settings.google_credentials_info()
+            if info is None:
+                raise CRMError("No Google service-account credentials configured")
+            credentials = Credentials.from_service_account_info(
+                info, scopes=list(_SCOPES)
+            )
         # cache_discovery=False avoids a noisy warning and a needless disk cache.
         return build("sheets", "v4", credentials=credentials, cache_discovery=False)
 

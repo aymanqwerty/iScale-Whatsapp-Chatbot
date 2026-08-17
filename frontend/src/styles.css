@@ -8,6 +8,12 @@
   --sidebar:352px;
 }
 *{box-sizing:border-box;}
+/* The `hidden` attribute works through the browser's default stylesheet, so
+   any author rule setting `display` silently defeats it - `.btn` is
+   `display:inline-flex`, which left the handover button visible on a blocked
+   contact despite `hidden={blocked}`. This restores `hidden` to meaning
+   hidden, whatever else a class says. */
+[hidden]{display:none !important;}
 html,body,#root{height:100%;margin:0;}
 body{
   background:var(--bg); color:var(--text);
