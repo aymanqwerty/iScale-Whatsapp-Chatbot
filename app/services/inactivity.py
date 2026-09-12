@@ -83,6 +83,20 @@ class InactivitySweeper:
         if not self._settings.inactivity_enabled:
             logger.info("Inactivity follow-up disabled")
             return
+        if not self._settings.inactivity_in_process:
+            # Driven by Cloud Scheduler calling /api/v1/internal/sweep instead.
+            # A loop here would be silently useless under request-based billing:
+            # the instance is frozen between requests, so it would tick only
+            # while a message happened to be in flight - which is precisely when
+            # nobody is idle enough to need chasing.
+            logger.info(
+                "Inactivity follow-up active (driven externally)",
+                extra={
+                    "first_after_minutes": self._settings.inactivity_minutes,
+                    "second_after_minutes": self._settings.inactivity_followup_minutes,
+                },
+            )
+            return
         self._task = asyncio.create_task(self._loop())
         logger.info(
             "Inactivity follow-up active",

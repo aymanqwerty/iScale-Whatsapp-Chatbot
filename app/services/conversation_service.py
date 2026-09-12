@@ -4,21 +4,27 @@ Responsibilities, in order: de-duplicate, load or create the user and
 conversation, persist the transcript, run the state machine, commit, then send
 the replies.
 
-Committing before sending is deliberate. The webhook has already returned 200 to
-Meta, so a rollback would not be retried by anyone - persisting the advanced
-state first means a WhatsApp outage costs the user a reply, not the whole
+Committing before sending is deliberate: persisting the advanced state first
+means a WhatsApp outage costs the user a reply rather than the whole
 conversation. Send failures are logged and the client retries internally.
+
+The turn now finishes before the webhook answers Meta, because Cloud Run's
+request-based billing withdraws CPU the moment a response is sent. That makes a
+redelivery possible mid-turn, which is why `process_inbound` treats a unique
+violation on `wa_message_id` as a duplicate rather than a failure.
 """
 
 from __future__ import annotations
+
+from sqlalchemy.exc import IntegrityError
 
 from app.bot.context import BotDependencies, TurnContext
 from app.bot.machine import ConversationMachine
 from app.core.config import Settings
 from app.core.events import broadcaster
 from app.core.logging import get_logger
-from app.db.session import Database
 from app.db.models.message import Message
+from app.db.session import Database
 from app.domain.enums import MessageSender
 from app.domain.messaging import InboundMessage, OutboundMessage, TurnResult
 from app.repositories.conversation_repository import ConversationRepository
@@ -85,6 +91,21 @@ class ConversationService:
         """Handle one message end to end. Never raises."""
         try:
             result, phone = await self._run_turn(inbound)
+        except IntegrityError:
+            # The same WhatsApp message, processed twice at once. Reachable now
+            # that the webhook answers Meta only after the turn finishes: a slow
+            # turn can outlast Meta's patience, and its redelivery starts before
+            # the first has committed, so the up-front de-duplication check sees
+            # nothing. The unique index on wa_message_id is the backstop.
+            #
+            # Silent on purpose. The customer is already getting an answer from
+            # the turn that won; an apology for a collision they cannot see
+            # would be worse than saying nothing.
+            logger.info(
+                "Concurrent redelivery ignored",
+                extra={"wa_message_id": inbound.wa_message_id},
+            )
+            return TurnResult()
         except Exception:
             logger.exception(
                 "Turn failed", extra={"wa_message_id": inbound.wa_message_id}
