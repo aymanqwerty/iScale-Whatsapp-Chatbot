@@ -190,6 +190,18 @@ class Settings(BaseSettings):
     #:
     #: Generous by default. Real delivery is a second or two, so this only ever
     #: catches genuine redeliveries. Set to 0 to disable the check.
+    #: Finish the turn before answering Meta, rather than after.
+    #:
+    #: Required under Cloud Run's request-based billing, where CPU is withdrawn
+    #: the moment the response is sent - work handed to a background task there
+    #: never runs, so the bot would accept every message and reply to none.
+    #:
+    #: The customer notices nothing either way: they see the typing indicator
+    #: immediately and the reply when it is ready. The only difference is that
+    #: Meta waits ~4s for its 200 instead of ~50ms, which is well inside its
+    #: window, and a redelivery is caught by the wa_message_id unique index.
+    webhook_inline_processing: bool = True
+
     webhook_max_message_age_seconds: int = 900
 
     # --- Inactivity follow-up ----------------------------------------------
@@ -197,6 +209,16 @@ class Settings(BaseSettings):
     #: closed so the next message starts fresh. Never sent to someone who
     #: finished (a booking completed, or they said goodbye), to a conversation a
     #: human has taken over, or twice to anyone.
+    #: Run the inactivity sweep as an in-process loop.
+    #:
+    #: False on Cloud Run, where the service uses request-based billing: CPU is
+    #: allocated only while a request is in flight, so a background loop simply
+    #: stops ticking between messages. Cloud Scheduler calls
+    #: `POST /api/v1/internal/sweep` instead, which runs the same sweep inside a
+    #: request, where it has CPU. True everywhere else, so local runs and any
+    #: always-on host keep the loop.
+    inactivity_in_process: bool = True
+
     inactivity_enabled: bool = True
     #: Silence before the first nudge. An hour is long enough that the person is
     #: genuinely away rather than reading, comparing courses in another tab, or

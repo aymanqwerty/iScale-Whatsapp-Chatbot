@@ -31,11 +31,19 @@ if (-not (Test-Path "env.yaml")) {
 if ((Get-Content "env.yaml" -Raw) -match "REPLACE_WITH_CLOUDSQL_PASSWORD") {
   throw "env.yaml still has the DATABASE_URL placeholder - set the real password first"
 }
-if (-not ((Get-Content "env.yaml" -Raw) -match "(?m)^GOOGLE_SERVICE_ACCOUNT_JSON:")) {
-  Write-Host "WARNING: no GOOGLE_SERVICE_ACCOUNT_JSON in env.yaml." -ForegroundColor Yellow
-  Write-Host "         Sheets sync will be off. Run .\add-service-account.ps1 to add it."
+$envText = Get-Content "env.yaml" -Raw
+if (-not (($envText -match '(?m)^GOOGLE_USE_ADC:\s*"true"') -or
+          ($envText -match '(?m)^GOOGLE_SERVICE_ACCOUNT_JSON:'))) {
+  Write-Host "WARNING: no Google credentials in env.yaml." -ForegroundColor Yellow
+  Write-Host "         Sheets sync will be off. Set GOOGLE_USE_ADC to true to"
+  Write-Host "         authenticate as the Cloud Run service account."
   Write-Host ""
 }
+
+# gcloud writes progress to stderr, which the Stop preference treats as a
+# terminating error even when the command succeeds. Exit codes are checked
+# explicitly after every call below, so that is the signal we rely on.
+$ErrorActionPreference = "Continue"
 
 if ($Build) {
   Write-Host "Building $IMAGE ..." -ForegroundColor Cyan
@@ -56,12 +64,15 @@ Write-Host "Deploying $IMAGE ..." -ForegroundColor Cyan
 
 # Every scaling flag here is load-bearing:
 #
-#   --no-cpu-throttling  The webhook answers Meta and THEN does the work, and
-#                        the inactivity sweeper is a long-lived async loop.
-#                        Cloud Run's default allocates CPU only during a
-#                        request, which freezes both - the bot would accept
-#                        every message and answer none.
-#   --min-instances=1    Nothing runs the sweeper if the service scales to zero.
+#   --cpu-throttling     Request-based billing: CPU only while a request is in
+#                        flight. Roughly a seventh the cost of keeping a vCPU
+#                        allocated around the clock. Safe only because the
+#                        webhook now finishes the turn before it answers Meta
+#                        and the sweep is driven by Cloud Scheduler - without
+#                        both, the bot would accept every message and answer
+#                        none. See tests/test_request_based_billing.py.
+#   --min-instances=1    Keeps one instance warm, billed at the much cheaper
+#                        idle rate, so no customer ever waits on a cold start.
 #   --max-instances=1    The console broadcaster, the rate limiters and the
 #                        sweeper are all per-process. A second instance means
 #                        agents miss live updates and quiet customers get two
@@ -72,7 +83,7 @@ gcloud run deploy iscale-bot `
   --region=$REGION `
   --allow-unauthenticated `
   --add-cloudsql-instances=$INSTANCE `
-  --no-cpu-throttling `
+  --cpu-throttling `
   --min-instances=1 `
   --max-instances=1 `
   --cpu=1 `

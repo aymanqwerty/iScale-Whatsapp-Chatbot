@@ -145,10 +145,24 @@ async def receive(
     else:
         throttled = 0
 
-    for inbound in accepted:
-        background_tasks.add_task(
-            _process, conversation_service, container, inbound
-        )
+    # Inline, not deferred, wherever the host withdraws CPU after the response.
+    # On Cloud Run's request-based billing a background task never runs: the
+    # instance is frozen the instant the 200 goes out, so the bot would accept
+    # every message and answer none - and Meta, having had its 200, would never
+    # retry. Answering first and acknowledging second costs Meta a few seconds
+    # of waiting and removes the failure mode entirely.
+    #
+    # Serial rather than concurrent: two turns for the same number would race on
+    # the same conversation row, and Meta batches rarely enough that the extra
+    # latency is cheaper than that bug.
+    if settings.webhook_inline_processing:
+        for inbound in accepted:
+            await _process(conversation_service, container, inbound)
+    else:
+        for inbound in accepted:
+            background_tasks.add_task(
+                _process, conversation_service, container, inbound
+            )
 
     logger.info("Webhook accepted", extra={"messages": len(accepted)})
     return {
