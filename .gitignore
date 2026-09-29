@@ -22,6 +22,9 @@ htmlcov/
 .coverage
 *.db
 *.sqlite3
+# Database exports hold every customer's name, phone number and transcript.
+*.dump
+*.sql
 
 .idea/
 .vscode/
