@@ -1,0 +1,72 @@
+# Discovery: the commercially important, hardest-to-get-right behaviour.
+#
+# When a person has not chosen a course, the bot's job is to show them - in their
+# own vocabulary - how AI For Everyone would change their specific day-to-day
+# work, not to read the catalogue at them. The first prompt had no discovery
+# guidance at all, so it produced a flat generic answer; the current prompt
+# tailors it. A regex cannot judge "is this specific to a shop owner?", so these
+# lean on the judge, with a deterministic not_refused floor.
+cases:
+  - id: discovery-shop-owner
+    category: discovery
+    state: DISCOVERY
+    message: "I run a small clothing shop"
+    notes: >
+      The pitch must be concrete to a retail/clothing shop owner (product photos,
+      catalogues, WhatsApp replies to customers), not a generic benefits list.
+    checks:
+      - type: not_refused
+      - type: judge
+        rubric: >
+          The reply is specifically tailored to someone who runs a clothing/retail
+          shop - it names concrete uses relevant to a shop (e.g. product photos,
+          catalogues, replying to customers, a simple website) rather than a
+          generic list of AI benefits that would suit anyone.
+
+  - id: discovery-btech-student
+    category: discovery
+    state: DISCOVERY
+    message: "i'm a final year b.tech student"
+    notes: Tailoring for a student - projects, internships, building/shipping apps.
+    checks:
+      - type: not_refused
+      - type: judge
+        rubric: >
+          The reply is specifically tailored to a final-year engineering student
+          (e.g. building or shipping a project, internships, freelancing,
+          automating coursework) rather than a generic list of AI benefits.
+
+  - id: discovery-upsell-in-qna
+    category: discovery
+    state: COURSE_QNA
+    course: ai-for-everyone
+    known_profile: "works as a school teacher"
+    message: "how will this course actually help me day to day?"
+    notes: >
+      The selling-upsell branch: a cohort-menu pick of AI For Everyone lands in
+      COURSE_QNA, not DISCOVERY, but is still the pitch the funnel exists to win.
+      With the profile already known, the reply should be concrete for a teacher.
+      The v1 prompt has no persuasion guidance on this branch and goes generic.
+    checks:
+      - type: not_refused
+      - type: judge
+        rubric: >
+          The reply is concretely useful to a school teacher (e.g. lesson plans,
+          worksheets, grading help, parent messages) rather than a generic pitch,
+          and it does not re-ask what the person does, since that is already known.
+
+  - id: discovery-language-mirror
+    category: discovery
+    state: COURSE_QNA
+    course: ai-engineer-advance-program
+    message: "bhai AI engineer course ki fees kitni hai aur kya seekhne ko milega?"
+    notes: >
+      Hinglish question. The reply must mirror the language AND still quote the
+      published fee - brevity/persona rules never override the grounding rules.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["19,999", "29,999", "39,999", "19999", "29999", "39999"]
+        why: published price must still be quoted
+      - type: judge
+        rubric: The reply is written in Hindi or Hinglish, matching the user's language.

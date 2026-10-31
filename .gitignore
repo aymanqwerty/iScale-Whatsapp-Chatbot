@@ -46,3 +46,10 @@ sa.json
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# Local Cloud SQL Auth Proxy binary - a downloaded tool, not project source.
+cloud-sql-proxy.exe
+
+# Eval reply cache (regenerated on demand, per-model).
+evals/.cache/
+evals/.last_compare.txt

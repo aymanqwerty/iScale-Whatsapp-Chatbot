@@ -1,0 +1,6 @@
+# Per-model reply cache and scratch output - regenerated on demand, not shared.
+.cache/
+.last_compare.txt
+
+# Keep baseline.json tracked on purpose: it is the regression bar, and it is
+# meant to be reviewed in a diff when it moves.

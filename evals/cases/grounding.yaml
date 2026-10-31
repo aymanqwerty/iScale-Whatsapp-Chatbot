@@ -1,0 +1,79 @@
+# Grounding and style: answer from KNOWLEDGE, escalate when it is absent, and
+# keep to the WhatsApp register. These are the rules both prompts share, so they
+# act as the eval's control group - they should pass on either version, and a
+# failure here is a real regression rather than an expected difference.
+cases:
+  - id: escalate-when-knowledge-absent
+    category: grounding
+    state: GENERAL_QNA
+    message: "do you have a tie-up with any bank for an education loan?"
+    notes: >
+      No financing-partner answer exists in KNOWLEDGE. The bot must not invent a
+      bank or an EMI partner; it should say it is not something it can confirm and
+      offer a counselor - the escalation move the prompt is built around.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["counselor", "counsellor", "confirm", "not sure", "can't", "cannot", "don't have"]
+        why: absent knowledge must trigger escalation, not invention
+      - type: judge
+        rubric: >
+          The reply does NOT invent a specific bank, lender or EMI/loan partner. It
+          either defers to a counselor or says it does not have that information.
+
+  - id: style-stays-short
+    category: grounding
+    state: COURSE_QNA
+    course: ai-engineer-advance-program
+    message: "how long is the AI Engineer program?"
+    notes: >
+      A simple factual question. Outside discovery the reply should stay in the
+      WhatsApp register - a few short sentences, not an email - and name the real
+      duration from KNOWLEDGE.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["month", "months"]
+        why: the duration is in KNOWLEDGE and should be stated
+      - type: max_words
+        max: 90
+        why: WhatsApp replies stay short; an essay here is a style regression
+
+  - id: hinglish-fee-retrieval-gap
+    category: grounding
+    state: COURSE_QNA
+    course: ai-powered-excel
+    message: "kitne ka hai excel wala course?"
+    notes: >
+      A real, known limitation this eval exists to guard. Lexical BM25 retrieval
+      misses this Hinglish phrasing of "how much": "kitne ka hai" shares no words
+      with "fees", so the fee snippet is NOT retrieved and the price is absent
+      from KNOWLEDGE. The correct behaviour is then to fail safe - escalate
+      honestly, never fabricate a figure. The bot does this today; this case locks
+      it in, so a future change that makes it guess a price here gets caught. (The
+      fix for the recall gap itself - query normalisation / multilingual terms -
+      is tracked separately; the eval's job is to keep the failure safe meanwhile.)
+    checks:
+      - type: not_refused
+      - type: not_regex
+        pattern: '(?i)(1,?999|rs\.?\s?\d|₹\s?\d|\d+\s?(rupees|rs\b))'
+        why: with no price in KNOWLEDGE the bot must not fabricate one
+      - type: contains_any
+        any: ["counselor", "counsellor", "confirm", "don't have", "do not have", "not sure"]
+        why: must escalate honestly when the fee was not retrieved
+
+  - id: ground-course-overview
+    category: grounding
+    state: COURSE_QNA
+    course: master-of-data-analytics
+    message: "what will I learn in the data analytics program?"
+    notes: >
+      Should summarise from the retrieved curriculum/overview without inventing
+      tools or modules that are not in KNOWLEDGE.
+    checks:
+      - type: not_refused
+      - type: judge
+        rubric: >
+          The reply describes the Data Analytics program using plausible,
+          on-topic content (data analysis, visualization, tools) and does not
+          obviously invent unrelated or fabricated course features.

@@ -1,0 +1,71 @@
+# Fees must be quoted when they are in KNOWLEDGE.
+#
+# This is the headline regression. The first prompt listed "fees" as a forbidden
+# topic, and the model read that as a blanket ban: asked "what are the fees?" it
+# answered "a counselor can confirm the price" while the exact figure sat in the
+# retrieved KNOWLEDGE. For a bot whose job is to sell, refusing to quote a
+# published price to the person closest to buying is the worst possible miss.
+# The current prompt makes fees quotable from KNOWLEDGE while still forbidding
+# invented discounts. These cases are what tell the two prompts apart.
+cases:
+  - id: fee-ai-engineer-quote
+    category: fees
+    state: COURSE_QNA
+    course: ai-engineer-advance-program
+    message: "How much does the AI Engineer Advance Program cost?"
+    notes: >
+      Published tiered pricing (19,999 / 29,999 / 39,999) is in KNOWLEDGE, so the
+      bot must state a real figure. The first prompt listed fees as FORBIDDEN; on
+      stricter models (e.g. Gemini) that made the bot refuse to quote a published
+      price - the original production bug. A capable model like gpt-4o-mini quotes
+      it anyway. That split is the point: the same prompt flaw surfaces on one
+      model and not another, which is exactly why the eval is run per model.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["19,999", "29,999", "39,999", "19999", "29999", "39999"]
+        why: a published price is in KNOWLEDGE and must be stated
+      - type: not_regex
+        pattern: '(?i)(discount|coupon|% ?off|flat ?\d)'
+        why: never volunteer or invent a discount - offers are system-rendered
+
+  - id: fee-ai-for-everyone-quote
+    category: fees
+    state: COURSE_QNA
+    course: ai-for-everyone
+    message: "what is the fee for AI For Everyone?"
+    notes: >
+      The cheapest paid course and the funnel's upsell target. Price Rs 4,999 is
+      in KNOWLEDGE.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["4,999", "4999"]
+        why: published price must be quoted
+
+  - id: fee-power-bi-quote
+    category: fees
+    state: COURSE_QNA
+    course: power-bi-tableau
+    message: "price of the power bi and tableau course?"
+    notes: Foundation course, price Rs 4,999 in KNOWLEDGE.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["4,999", "4999"]
+
+  - id: fee-excel-quote
+    category: fees
+    state: COURSE_QNA
+    course: ai-powered-excel
+    message: "excel course ki price kya hai?"
+    notes: >
+      Hinglish fee question on the cheapest course (Rs 1,999), phrased with a
+      price word so retrieval surfaces the fee snippet - this case isolates the
+      prompt's fee-quoting contract, not retrieval recall. The Hinglish phrasing
+      that retrieval currently misses ("kitne ka hai") is guarded separately in
+      grounding.yaml, as a fail-safe case.
+    checks:
+      - type: not_refused
+      - type: contains_any
+        any: ["1,999", "1999"]
